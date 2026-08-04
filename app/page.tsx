@@ -4,11 +4,15 @@ import { useState, useEffect } from 'react';
 import { Lilita_One, Quicksand } from 'next/font/google';
 import { createClient } from '@supabase/supabase-js';
 
-// --- SUPABASE INITIALIZATION ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// --- SUPABASE INITIALIZATION (BULLETPROOF FIX) ---
+// This safely removes any accidental quotes or invisible spaces from Vercel's variables!
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder_key';
 
+const cleanUrl = rawUrl.replace(/['"]/g, '').trim();
+const cleanKey = rawKey.replace(/['"]/g, '').trim();
+
+const supabase = createClient(cleanUrl, cleanKey);
 // Fonts
 const titleFont = Lilita_One({ weight: '400', subsets: ['latin'] });
 const subtitleFont = Quicksand({ weight: '700', subsets: ['latin'] });
@@ -604,4 +608,4 @@ export default function Home() {
     </div>
   );
 }
-// forcing vercelv to update
+// forcing vercel to update
