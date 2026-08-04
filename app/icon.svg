@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Purple background with a pink border -->
+  <rect width="512" height="512" rx="120" fill="#8A2BE2" stroke="#E6A8D7" stroke-width="20"/>
+  <!-- White text saying RURI -->
+  <text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" font-family="system-ui, sans-serif" font-size="160" font-weight="900" fill="#ffffff">RURI</text>
+</svg>
