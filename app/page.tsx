@@ -4,15 +4,13 @@ import { useState, useEffect } from 'react';
 import { Lilita_One, Quicksand } from 'next/font/google';
 import { createClient } from '@supabase/supabase-js';
 
-// --- SUPABASE INITIALIZATION (BULLETPROOF FIX) ---
-// This safely removes any accidental quotes or invisible spaces from Vercel's variables!
+// --- SUPABASE INITIALIZATION ---
 const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder_key';
-
 const cleanUrl = rawUrl.replace(/['"]/g, '').trim();
 const cleanKey = rawKey.replace(/['"]/g, '').trim();
-
 const supabase = createClient(cleanUrl, cleanKey);
+
 // Fonts
 const titleFont = Lilita_One({ weight: '400', subsets: ['latin'] });
 const subtitleFont = Quicksand({ weight: '700', subsets: ['latin'] });
@@ -105,7 +103,6 @@ export default function Home() {
     fetchDbProducts();
   }, []);
 
-  // Sync tickets automatically if Admin is logged in OR if the user is checking the public tickets view
   useEffect(() => {
     if (activeTab === 'public-tickets' || (isAdminLoggedIn && activeTab === 'admin' && adminSection === 'tickets')) {
       fetchTickets();
@@ -126,7 +123,9 @@ export default function Home() {
     if (data) setTickets(data);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
   const handleTicketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,6 +139,7 @@ export default function Home() {
     } else {
       setSubmitMessage('✅ Ticket submitted successfully! Please check the "Submitted Tickets" section for live updates.');
       setFormData({ premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '', account_password: '', subscription: '', solo_shared: '', purchased_price: '', date_purchased: '', date_reported: '', remaining_days: '', issue: '' });
+      fetchTickets(); // Immediately fetch the new ticket to update the public count!
     }
     setIsSubmitting(false);
   };
@@ -195,6 +195,41 @@ export default function Home() {
   const inputStyle = { width: '100%', padding: '12px 15px', borderRadius: '10px', border: '1px solid #E6A8D7', backgroundColor: '#FDF0F5', color: '#8A2BE2', marginBottom: '15px', fontFamily: textFont.style.fontFamily, outline: 'none', boxSizing: 'border-box' as const };
   const labelStyle = { display: 'block', color: '#8A2BE2', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.95rem' };
 
+  // --- STATS & 90-DAY LOGIC ---
+  const totalTicketsCount = tickets.length;
+  const pendingCount = tickets.filter(t => t.status === 'Pending').length;
+  const inProgressCount = tickets.filter(t => t.status === 'In Progress').length;
+  const completedCount = tickets.filter(t => t.status === 'Completed').length;
+
+  // Filter to only display tickets from the last 90 days
+  const visibleTickets = tickets.filter(ticket => {
+    const ticketDate = new Date(ticket.created_at);
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    return ticketDate >= ninetyDaysAgo;
+  });
+
+  const TicketStatsGrid = () => (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
+      <div style={{ backgroundColor: '#F3E8FF', padding: '15px', borderRadius: '10px', textAlign: 'center', border: '1px solid #D8B4FE', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+        <h4 style={{ margin: 0, color: '#7E22CE', fontSize: '1.8rem' }}>{totalTicketsCount}</h4>
+        <p style={{ margin: '5px 0 0 0', color: '#9333EA', fontSize: '0.85rem', fontWeight: 'bold' }}>LIFETIME TOTAL</p>
+      </div>
+      <div style={{ backgroundColor: '#FEE2E2', padding: '15px', borderRadius: '10px', textAlign: 'center', border: '1px solid #FCA5A5', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+        <h4 style={{ margin: 0, color: '#991B1B', fontSize: '1.8rem' }}>{pendingCount}</h4>
+        <p style={{ margin: '5px 0 0 0', color: '#EF4444', fontSize: '0.85rem', fontWeight: 'bold' }}>PENDING</p>
+      </div>
+      <div style={{ backgroundColor: '#FEF3C7', padding: '15px', borderRadius: '10px', textAlign: 'center', border: '1px solid #FCD34D', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+        <h4 style={{ margin: 0, color: '#92400E', fontSize: '1.8rem' }}>{inProgressCount}</h4>
+        <p style={{ margin: '5px 0 0 0', color: '#F59E0B', fontSize: '0.85rem', fontWeight: 'bold' }}>IN PROGRESS</p>
+      </div>
+      <div style={{ backgroundColor: '#DCFCE7', padding: '15px', borderRadius: '10px', textAlign: 'center', border: '1px solid #86EFAC', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+        <h4 style={{ margin: 0, color: '#166534', fontSize: '1.8rem' }}>{completedCount}</h4>
+        <p style={{ margin: '5px 0 0 0', color: '#22C55E', fontSize: '0.85rem', fontWeight: 'bold' }}>COMPLETED</p>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: '#FDF0F5', fontFamily: textFont.style.fontFamily, overflow: 'hidden' }}>
       
@@ -213,7 +248,7 @@ export default function Home() {
             { id: 'services', label: '✨ Services Offered' }, 
             { id: 'payment', label: '💳 Payment Options' },
             { id: 'reports', label: '🎫 Submit a Ticket' }, 
-            { id: 'public-tickets', label: '✅ Submitted Tickets' }, // NEW PUBLIC TICKETS SECTION
+            { id: 'public-tickets', label: '✅ Submitted Tickets' },
             { id: 'contact', label: '📞 Customer Service' }
           ].map((item) => (
             <div key={item.id} onClick={() => handleNav(item.id)} style={{ padding: '15px 25px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', backgroundColor: activeTab === item.id ? '#000000' : 'transparent', color: activeTab === item.id ? '#FFD1DC' : '#000000', borderBottom: '1px solid rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>{item.label}</div>
@@ -279,11 +314,21 @@ export default function Home() {
                 <button onClick={() => setAdminSection('tickets')} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'tickets' ? '#8A2BE2' : '#ffffff', color: adminSection === 'tickets' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🎫 Tickets</button>
                 <button onClick={() => setAdminSection('products')} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'products' ? '#8A2BE2' : '#ffffff', color: adminSection === 'products' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🛍️ Edit Products</button>
               </div>
+
+              {/* TICKET SECTION IN ADMIN */}
               {adminSection === 'tickets' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                  <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem' }}>🎫 Submitted Tickets</h4>
-                  {tickets.length === 0 ? <p style={{ color: '#8A2BE2', fontStyle: 'italic' }}>No tickets submitted yet.</p> : (
-                    tickets.map((ticket) => (
+                  
+                  {/* ADMIN LIFETIME TICKET STATS */}
+                  <TicketStatsGrid />
+
+                  <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px' }}>
+                    🎫 Recent Tickets (Last 90 Days)
+                  </h4>
+                  <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: '15px' }}>Older tickets are hidden to keep your dashboard clean, but they are still counted in your lifetime stats above!</p>
+                  
+                  {visibleTickets.length === 0 ? <p style={{ color: '#8A2BE2', fontStyle: 'italic' }}>No recent tickets submitted.</p> : (
+                    visibleTickets.map((ticket) => (
                       <div key={ticket.id} style={{ border: '2px solid #FDF0F5', borderRadius: '10px', padding: '15px', marginBottom: '15px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                           <strong>{ticket.premium_type || 'Unknown Item'}</strong>
@@ -291,23 +336,24 @@ export default function Home() {
                             <option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Completed">Completed</option>
                           </select>
                         </div>
-                        <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Contact Email: {ticket.contact_email}</p>
-                        <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Issue: {ticket.issue}</p>
+                        <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Account Email: {ticket.contact_email || 'Not Provided'}</p>
+                        <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Issue: {ticket.issue || 'Not Provided'}</p>
                         <button onClick={() => setExpandedTicketId(expandedTicketId === ticket.id ? null : ticket.id)} style={{ background: 'none', border: 'none', color: '#8A2BE2', fontWeight: 'bold', cursor: 'pointer', padding: 0, marginTop: '10px' }}>
                           {expandedTicketId === ticket.id ? 'Hide Details ▲' : 'View Full Details ▼'}
                         </button>
+
                         {expandedTicketId === ticket.id && (
                           <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#FDF0F5', borderRadius: '8px', fontSize: '0.85rem', color: '#333' }}>
-                            <p style={{ margin: '3px 0' }}><strong>Personal Email:</strong> {ticket.personal_email}</p>
-                            <p style={{ margin: '3px 0' }}><strong>TG Username:</strong> {ticket.telegram_username}</p>
-                            <p style={{ margin: '3px 0' }}><strong>First Email:</strong> {ticket.first_email}</p>
-                            <p style={{ margin: '3px 0' }}><strong>Password:</strong> {ticket.account_password}</p>
-                            <p style={{ margin: '3px 0' }}><strong>Subscription:</strong> {ticket.subscription}</p>
-                            <p style={{ margin: '3px 0' }}><strong>Solo/Shared:</strong> {ticket.solo_shared}</p>
-                            <p style={{ margin: '3px 0' }}><strong>Price:</strong> {ticket.purchased_price}</p>
-                            <p style={{ margin: '3px 0' }}><strong>Date Purchased:</strong> {ticket.date_purchased}</p>
-                            <p style={{ margin: '3px 0' }}><strong>Date Reported:</strong> {ticket.date_reported}</p>
-                            <p style={{ margin: '3px 0' }}><strong>Remaining Days:</strong> {ticket.remaining_days}</p>
+                            <p style={{ margin: '3px 0' }}><strong>TG Username:</strong> {ticket.telegram_username || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>First Email:</strong> {ticket.first_email || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>Password:</strong> {ticket.account_password || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>Subscription:</strong> {ticket.subscription || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>Solo/Shared:</strong> {ticket.solo_shared || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>Price:</strong> {ticket.purchased_price || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>Date Purchased:</strong> {ticket.date_purchased || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>Date Reported:</strong> {ticket.date_reported || 'Not Provided'}</p>
+                            <p style={{ margin: '3px 0' }}><strong>Remaining Days:</strong> {ticket.remaining_days || 'Not Provided'}</p>
+                            <p style={{ margin: '8px 0 0 0', paddingTop: '8px', borderTop: '1px dashed #D27DCE', color: '#8A2BE2' }}><strong>Personal Email (For Updates):</strong> {ticket.personal_email || 'Not Provided'}</p>
                           </div>
                         )}
                       </div>
@@ -315,6 +361,8 @@ export default function Home() {
                   )}
                 </div>
               )}
+
+              {/* PRODUCTS MANAGER IN ADMIN */}
               {adminSection === 'products' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                   <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem' }}>🛍️ Product Manager</h4>
@@ -347,8 +395,14 @@ export default function Home() {
               )}
             </div>
           )}
+          {activeTab === 'admin' && !isAdminLoggedIn && (
+            <div style={{ textAlign: 'center', marginTop: '50px' }}>
+              <h2 style={{ color: '#EF4444' }}>Access Denied</h2>
+              <button onClick={() => handleNav('dashboard')} style={{ padding: '10px 20px', borderRadius: '10px', border: '2px solid #8A2BE2', backgroundColor: 'transparent', color: '#8A2BE2', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}>Return to Dashboard</button>
+            </div>
+          )}
 
-          {/* VIEW: PRODUCTS, SERVICES, PAYMENT (Unchanged logic omitted here for brevity, full code is included) */}
+          {/* VIEW: PRODUCTS */}
           {activeTab === 'products' && (
             <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Products Offered</h3>
@@ -370,6 +424,7 @@ export default function Home() {
             </div>
           )}
 
+          {/* VIEW: SERVICES */}
           {activeTab === 'services' && (
             <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Services Offered</h3>
@@ -418,6 +473,7 @@ export default function Home() {
             </div>
           )}
 
+          {/* VIEW: PAYMENT */}
           {activeTab === 'payment' && (
              <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Payment Method</h3>
@@ -436,12 +492,10 @@ export default function Home() {
              </div>
           )}
 
-          {/* VIEW: REPORTS */}
+          {/* VIEW: REPORTS (UPDATED LAYOUT) */}
           {activeTab === 'reports' && (
              <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Report Forms</h3>
-              
-              {/* NEW SMART REMINDER */}
               <div style={{ backgroundColor: '#FDF0F5', padding: '18px', borderRadius: '10px', border: '2px dashed #D27DCE', color: '#8A2BE2', fontSize: '1rem', fontWeight: 'bold', marginBottom: '20px', textAlign: 'center', boxShadow: '0 4px 10px rgba(230, 168, 215, 0.3)' }}>
                 🔔 Reminder: After submitting, you can check the live status of your ticket anytime by clicking <span style={{ color: '#ffffff', backgroundColor: '#8A2BE2', padding: '3px 8px', borderRadius: '5px' }}>✅ Submitted Tickets</span> in the side menu! We are working on it!
               </div>
@@ -461,32 +515,45 @@ export default function Home() {
                 <form onSubmit={handleTicketSubmit}>
                   <label style={labelStyle}>⩇ premium type :</label>
                   <input type="text" name="premium_type" value={formData.premium_type} onChange={handleInputChange} placeholder="(e.g. Netflix)" style={inputStyle} required />
+                  
                   <label style={labelStyle}>⩇ telegram username :</label>
                   <input type="text" name="telegram_username" value={formData.telegram_username} onChange={handleInputChange} placeholder="(NA - if none)" style={inputStyle} />
+                  
                   <label style={labelStyle}>⩇ first email (if applicable) :</label>
                   <input type="text" name="first_email" value={formData.first_email} onChange={handleInputChange} placeholder="First email..." style={inputStyle} />
-                  <label style={labelStyle}>⩇ Personal Email to receive updates :</label>
-                  <input type="email" name="personal_email" value={formData.personal_email} onChange={handleInputChange} placeholder="(e.g. yourownemail@gmail.com)" style={inputStyle} required />
-                  <label style={labelStyle}>⩇ email :</label>
+                  
+                  <label style={labelStyle}>⩇ Account email :</label>
                   <input type="email" name="contact_email" value={formData.contact_email} onChange={handleInputChange} placeholder="(ruris.digitaldepot@rurika.shop)" style={inputStyle} required />
+                  
                   <label style={labelStyle}>⩇ password :</label>
                   <input type="password" name="account_password" value={formData.account_password} onChange={handleInputChange} placeholder="Password..." style={inputStyle} />
+                  
                   <label style={labelStyle}>⩇ subscription :</label>
                   <input type="text" name="subscription" value={formData.subscription} onChange={handleInputChange} placeholder="(e.g. plus, pro, max, premium)" style={inputStyle} />
+                  
                   <label style={labelStyle}>⩇ solo / shared :</label>
                   <select name="solo_shared" value={formData.solo_shared} onChange={handleInputChange} style={inputStyle}>
                     <option value="">Select option...</option><option value="solo">Solo</option><option value="shared">Shared</option>
                   </select>
+                  
                   <label style={labelStyle}>⩇ purchased price :</label>
                   <input type="text" name="purchased_price" value={formData.purchased_price} onChange={handleInputChange} placeholder="Amount..." style={inputStyle} />
+                  
                   <label style={labelStyle}>⩇ date purchased :</label>
                   <input type="date" name="date_purchased" value={formData.date_purchased} onChange={handleInputChange} style={inputStyle} />
+                  
                   <label style={labelStyle}>⩇ date reported :</label>
                   <input type="date" name="date_reported" value={formData.date_reported} onChange={handleInputChange} style={inputStyle} />
+                  
                   <label style={labelStyle}>⩇ remaining days :</label>
                   <input type="number" name="remaining_days" value={formData.remaining_days} onChange={handleInputChange} placeholder="Days..." style={inputStyle} />
+                  
                   <label style={labelStyle}>⩇ issue :</label>
                   <textarea name="issue" value={formData.issue} onChange={handleInputChange} placeholder="Describe the issue..." rows={4} style={{...inputStyle, resize: 'vertical'}} required></textarea>
+
+                  <label style={labelStyle}>⩇ Personal Email to receive updates :</label>
+                  <input type="email" name="personal_email" value={formData.personal_email} onChange={handleInputChange} placeholder="(e.g. yourownemail@gmail.com)" style={inputStyle} required />
+
                   <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', backgroundColor: isSubmitting ? '#ccc' : '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: isSubmitting ? 'not-allowed' : 'pointer', marginTop: '10px', boxShadow: '0 2px 5px rgba(138,43,226,0.3)' }}>Submit Report</button>
                 </form>
                 <div style={{ marginTop: '25px', padding: '15px', backgroundColor: '#FDF0F5', borderRadius: '10px', borderLeft: '4px solid #D27DCE', color: '#8A2BE2', fontSize: '0.9rem', lineHeight: '1.5' }}>
@@ -497,42 +564,29 @@ export default function Home() {
              </div>
           )}
 
-          {/* ========================================== */}
-          {/* VIEW: PUBLIC TICKETS TRACKER (NEW)         */}
-          {/* ========================================== */}
+          {/* VIEW: PUBLIC TICKETS TRACKER */}
           {activeTab === 'public-tickets' && (
              <div style={{ animation: 'fadeIn 0.5s' }}>
-              <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>
-                Live Ticket Status
-              </h3>
+              <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Live Ticket Status</h3>
               
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '25px 20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                <p style={{ color: '#D27DCE', textAlign: 'center', marginBottom: '25px', fontWeight: 'bold', fontSize: '1.05rem' }}>
-                  Track the status of your submitted tickets here. We process them as fast as we can!
-                </p>
-
-                {tickets.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#8A2BE2', fontStyle: 'italic' }}>No tickets are currently submitted.</p>
-                ) : (
+                
+                {/* PUBLIC LIFETIME TICKET STATS */}
+                <TicketStatsGrid />
+                
+                <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.2rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px', textAlign: 'center' }}>
+                  Recent Tickets (Last 90 Days)
+                </h4>
+                
+                {visibleTickets.length === 0 ? <p style={{ textAlign: 'center', color: '#8A2BE2', fontStyle: 'italic' }}>No tickets are currently submitted.</p> : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    {tickets.map(ticket => (
+                    {visibleTickets.map(ticket => (
                       <div key={ticket.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #E6A8D7', paddingBottom: '15px' }}>
                         <div>
-                          {/* Only showing safe, public info */}
-                          <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#8A2BE2', fontSize: '1.1rem' }}>
-                            {ticket.premium_type || 'Unknown Premium'}
-                          </p>
-                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#888' }}>
-                            Submitted: {new Date(ticket.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                          </p>
+                          <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#8A2BE2', fontSize: '1.1rem' }}>{ticket.premium_type || 'Unknown Premium'}</p>
+                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#888' }}>Submitted: {new Date(ticket.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                         </div>
-                        
-                        {/* Dynamic Status Badge */}
-                        <span style={{ 
-                          padding: '6px 14px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 'bold',
-                          backgroundColor: ticket.status === 'Completed' ? '#DCFCE7' : ticket.status === 'In Progress' ? '#FEF3C7' : '#FEE2E2', 
-                          color: ticket.status === 'Completed' ? '#166534' : ticket.status === 'In Progress' ? '#92400E' : '#991B1B' 
-                        }}>
+                        <span style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 'bold', backgroundColor: ticket.status === 'Completed' ? '#DCFCE7' : ticket.status === 'In Progress' ? '#FEF3C7' : '#FEE2E2', color: ticket.status === 'Completed' ? '#166534' : ticket.status === 'In Progress' ? '#92400E' : '#991B1B' }}>
                           {ticket.status}
                         </span>
                       </div>
@@ -608,4 +662,3 @@ export default function Home() {
     </div>
   );
 }
-// forcing vercel to update2
