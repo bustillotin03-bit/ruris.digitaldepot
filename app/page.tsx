@@ -75,23 +75,35 @@ export default function Home() {
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [selectedBoosting, setSelectedBoosting] = useState<string | null>(null);
   const [openService, setOpenService] = useState<string | null>(null);
+  const [openOwner, setOpenOwner] = useState(false);
 
   const [dbProducts, setDbProducts] = useState<Record<string, { status: string, prices: any[] }>>({});
+  const [dbServices, setDbServices] = useState<any[]>([]);
 
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPin, setAdminPin] = useState('');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState(false);
-  const [adminSection, setAdminSection] = useState<'tickets' | 'products'>('tickets');
+  const [adminSection, setAdminSection] = useState<'tickets' | 'products' | 'services'>('tickets');
   
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState('Available');
   const [editPrices, setEditPrices] = useState<{label: string, price: string}[]>([]);
 
+  const [editingSvcId, setEditingSvcId] = useState<string | null>(null);
+  const [svcTitle, setSvcTitle] = useState('');
+  const [svcContent, setSvcContent] = useState('');
+  const [svcNote, setSvcNote] = useState('');
+
+  // Ticket Submission States (NEW POP-UP LOGIC)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successTicketId, setSuccessTicketId] = useState('');
+  
   const [tickets, setTickets] = useState<any[]>([]);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
+  const [ticketSearch, setTicketSearch] = useState('');
 
   const [formData, setFormData] = useState({
     premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '',
@@ -101,6 +113,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchDbProducts();
+    fetchDbServices();
   }, []);
 
   useEffect(() => {
@@ -118,6 +131,11 @@ export default function Home() {
     }
   };
 
+  const fetchDbServices = async () => {
+    const { data } = await supabase.from('ruri_services').select('*').order('created_at', { ascending: true });
+    if (data) setDbServices(data);
+  };
+
   const fetchTickets = async () => {
     const { data } = await supabase.from('ruri_tickets').select('*').order('created_at', { ascending: false });
     if (data) setTickets(data);
@@ -130,16 +148,22 @@ export default function Home() {
   const handleTicketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setSubmitMessage('');
+    setSubmitMessage(''); 
 
-    const { error } = await supabase.from('ruri_tickets').insert([formData]);
+    // Generate random 6-digit ticket ID
+    const generatedId = Math.floor(100000 + Math.random() * 900000).toString();
+    const payload = { ...formData, ticket_id: generatedId };
+
+    const { error } = await supabase.from('ruri_tickets').insert([payload]);
 
     if (error) {
       setSubmitMessage('❌ Error submitting ticket. Please try again.');
     } else {
-      setSubmitMessage('✅ Ticket submitted successfully! Please check the "Submitted Tickets" section for live updates.');
+      // SUCCESS! Show Pop-up and clear form
+      setSuccessTicketId(generatedId);
+      setShowSuccessModal(true);
       setFormData({ premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '', account_password: '', subscription: '', solo_shared: '', purchased_price: '', date_purchased: '', date_reported: '', remaining_days: '', issue: '' });
-      fetchTickets(); // Immediately fetch the new ticket to update the public count!
+      fetchTickets();
     }
     setIsSubmitting(false);
   };
@@ -156,29 +180,33 @@ export default function Home() {
     setEditStatus(dbData?.status || 'Available');
     setEditPrices(dbData?.prices || fallback?.prices || []);
   };
-
   const updateEditPrice = (index: number, field: 'label' | 'price', value: string) => {
     const newPrices = [...editPrices];
     newPrices[index][field] = value;
     setEditPrices(newPrices);
   };
-
   const addPriceOption = () => setEditPrices([...editPrices, { label: 'New Option', price: '₱0' }]);
   const removePriceOption = (index: number) => setEditPrices(editPrices.filter((_, i) => i !== index));
-
   const handleSaveProduct = async () => {
     if (!editingProduct) return;
-    const { error } = await supabase.from('ruri_products').upsert({
-      product_name: editingProduct,
-      status: editStatus,
-      prices: editPrices
-    });
-    if (!error) {
-      alert('✅ Product Pricing & Status Updated!');
-      fetchDbProducts();
-    } else {
-      alert('❌ Error updating product.');
-    }
+    const { error } = await supabase.from('ruri_products').upsert({ product_name: editingProduct, status: editStatus, prices: editPrices });
+    if (!error) { alert('✅ Product Pricing Updated!'); fetchDbProducts(); } 
+    else { alert('❌ Error updating product.'); }
+  };
+
+  const loadServiceToEdit = (svc: any) => { setEditingSvcId(svc.id); setSvcTitle(svc.title); setSvcContent(svc.content); setSvcNote(svc.note || ''); };
+  const cancelServiceEdit = () => { setEditingSvcId(null); setSvcTitle(''); setSvcContent(''); setSvcNote(''); };
+  const handleSaveService = async () => {
+    if (!svcTitle || !svcContent) return alert('Title and Content are required!');
+    const payload = { title: svcTitle, content: svcContent, note: svcNote };
+    if (editingSvcId) { await supabase.from('ruri_services').update(payload).eq('id', editingSvcId); } 
+    else { await supabase.from('ruri_services').insert([payload]); }
+    alert('✅ Service saved successfully!');
+    cancelServiceEdit();
+    fetchDbServices();
+  };
+  const handleDeleteService = async (id: string) => {
+    if (confirm('Delete this service permanently?')) { await supabase.from('ruri_services').delete().eq('id', id); fetchDbServices(); }
   };
 
   const toggleCategory = (categoryName: string) => setOpenCategory(openCategory === categoryName ? null : categoryName);
@@ -201,13 +229,16 @@ export default function Home() {
   const inProgressCount = tickets.filter(t => t.status === 'In Progress').length;
   const completedCount = tickets.filter(t => t.status === 'Completed').length;
 
-  // Filter to only display tickets from the last 90 days
   const visibleTickets = tickets.filter(ticket => {
     const ticketDate = new Date(ticket.created_at);
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     return ticketDate >= ninetyDaysAgo;
   });
+
+  const displayedPublicTickets = ticketSearch.trim() 
+    ? tickets.filter(t => t.ticket_id?.includes(ticketSearch.trim()))
+    : visibleTickets;
 
   const TicketStatsGrid = () => (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
@@ -270,10 +301,60 @@ export default function Home() {
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', borderLeft: '5px solid #8A2BE2', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                 <p style={{ color: '#8A2BE2', margin: 0, fontWeight: 'bold', fontSize: '1.05rem', lineHeight: '1.5' }}>⚠️ <span style={{ color: '#D27DCE' }}>Reminder:</span> Please note that the premium products are BMed; this simply means that possible errors/problems may occur on the account.</p>
               </div>
+              
+              {/* UPDATED PERFECTLY ALIGNED RULES */}
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '25px', borderLeft: '5px solid #D27DCE', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', margin: '0 0 10px 0', fontSize: '1.3rem' }}>📜 Rules & Regulations</h3>
-                <p style={{ color: '#8A2BE2', margin: 0, fontSize: '0.95rem', lineHeight: '1.6' }}><strong>No Refund Policy</strong>, unless stated by owner. If incorrect amount is sent, it will be considered as a balance. If insist, a 2% deduction may apply.</p>
+                <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', margin: '0 0 15px 0', fontSize: '1.3rem' }}>📜 Rules & Regulations</h3>
+                <div style={{ color: '#8A2BE2', fontSize: '0.95rem', lineHeight: '1.6' }}>
+                  
+                  <div style={{ display: 'flex', marginBottom: '15px' }}>
+                    <strong style={{ marginRight: '8px' }}>ⓘ</strong>
+                    <div>
+                      <strong>order processing time :</strong><br/>
+                      <div style={{ paddingLeft: '15px' }}>
+                        supplied : secs/mins<br/>
+                        mto : mins/hrs
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', marginBottom: '15px' }}>
+                    <strong style={{ marginRight: '8px' }}>ⓘ</strong>
+                    <div>
+                      <strong>reports & tickets :</strong><br/>
+                      <div style={{ paddingLeft: '15px' }}>
+                        1-7 business days
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', marginBottom: '15px' }}>
+                    <strong style={{ marginRight: '8px' }}>ⓘ</strong>
+                    <div>
+                      <strong>Refunds :</strong><br/>
+                      <div style={{ paddingLeft: '15px' }}>
+                        strictly no refund.<br/>
+                        unless stated by owner. If incorrect amount<br/>
+                        is sent, it will be considered as a balance.<br/>
+                        If insist, a 2% deduction may apply.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex' }}>
+                    <strong style={{ marginRight: '8px' }}>ⓘ</strong>
+                    <div>
+                      I don&apos;t cater rude and impatient<br/>
+                      <div style={{ paddingLeft: '15px' }}>
+                        clients. please read rules<br/>
+                        before making a purchase.
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
               </div>
+              
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.8rem', textAlign: 'center', marginBottom: '15px' }}>Navigate Here 👇</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '3rem' }}>
                 {[
@@ -283,6 +364,67 @@ export default function Home() {
                   <button key={btn.id} onClick={() => handleNav(btn.id)} style={{ backgroundColor: btn.bg, color: btn.color, border: btn.border || 'none', padding: '15px', borderRadius: '15px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>{btn.label}</button>
                 ))}
               </div>
+
+              {/* UPDATED PERFECTLY ALIGNED ABOUT OWNER */}
+              <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '25px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                <div onClick={() => setOpenOwner(!openOwner)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                  <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', margin: 0, fontSize: '1.4rem' }}>🌸 About Owner</h3>
+                  <span style={{ color: '#D27DCE', fontSize: '1.2rem', fontWeight: 'bold' }}>{openOwner ? '▴' : '▾'}</span>
+                </div>
+                {openOwner && (
+                  <div style={{ marginTop: '15px', color: '#8A2BE2', fontSize: '0.95rem', lineHeight: '1.6' }}>
+                    
+                    <div style={{ display: 'flex', marginBottom: '10px' }}>
+                      <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ about :</strong>
+                      <div>
+                        iʼll be ur seller, supplier,<br/>
+                        reseller, service provider,<br/>
+                        mid, booster & keeper.
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', marginBottom: '10px' }}>
+                      <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ tenurity :</strong>
+                      <div>
+                        since 2019<br/>
+                        highest keep : 5.2k
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', marginBottom: '10px' }}>
+                      <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ services :</strong>
+                      <div>
+                        check my website<br/>
+                        rurika.shop
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', marginBottom: '10px' }}>
+                      <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ mop :</strong>
+                      <div>gcash, gotyme, maya</div>
+                    </div>
+
+                    <div style={{ display: 'flex', marginBottom: '10px' }}>
+                      <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ proofs & vouches :</strong>
+                      <div><a href="https://t.me/rurishoppu" target="_blank" rel="noopener noreferrer" style={{color:'#D27DCE', textDecoration:'none', fontWeight:'bold'}}>https://t.me/rurishoppu</a></div>
+                    </div>
+
+                    <div style={{ display: 'flex', marginBottom: '10px' }}>
+                      <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ telegram :</strong>
+                      <div>@strobariii</div>
+                    </div>
+                    
+                    <hr style={{ border: '1px dashed #E6A8D7', margin: '15px 0' }} />
+                    
+                    <p style={{ margin: '5px 0' }}><strong>more about owner:</strong><br/>age: 21 | pronouns: she, her<br/>zodiac: cancer | stats: nbsb<br/>cat lover & sweet tooth</p>
+                    
+                    <div style={{ backgroundColor: '#FDF0F5', padding: '12px', borderRadius: '8px', marginTop: '15px', fontSize: '0.85rem', fontWeight: 'bold', color: '#D27DCE' }}>
+                      just to set clear a expectation that the owner has a full-time job and is unable to address your concerns immediately. aside from that, she has other hustles during her free time. if unresponsive, she might be busy, on-duty, or asleep. spamming is not allowed unless stated as important.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div style={{ backgroundColor: '#000000', borderRadius: '20px', padding: '25px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
                 <h3 className={subtitleFont.className} style={{ color: '#FFD1DC', margin: '0 0 15px 0', fontSize: '1.4rem', textAlign: 'center' }}>🔒 Admin Tool</h3>
                 {isAdminLoggedIn ? (
@@ -310,32 +452,29 @@ export default function Home() {
                 <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', margin: 0 }}>⚙️ Admin Panel</h3>
                 <button onClick={handleAdminLogout} style={{ padding: '8px 15px', borderRadius: '10px', backgroundColor: '#EF4444', color: 'white', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Logout</button>
               </div>
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={() => setAdminSection('tickets')} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'tickets' ? '#8A2BE2' : '#ffffff', color: adminSection === 'tickets' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🎫 Tickets</button>
-                <button onClick={() => setAdminSection('products')} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'products' ? '#8A2BE2' : '#ffffff', color: adminSection === 'products' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🛍️ Edit Products</button>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                <button onClick={() => setAdminSection('tickets')} style={{ flex: 1, minWidth: '100px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'tickets' ? '#8A2BE2' : '#ffffff', color: adminSection === 'tickets' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🎫 Tickets</button>
+                <button onClick={() => setAdminSection('products')} style={{ flex: 1, minWidth: '100px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'products' ? '#8A2BE2' : '#ffffff', color: adminSection === 'products' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🛍️ Products</button>
+                <button onClick={() => setAdminSection('services')} style={{ flex: 1, minWidth: '100px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'services' ? '#8A2BE2' : '#ffffff', color: adminSection === 'services' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>✨ Services</button>
               </div>
 
               {/* TICKET SECTION IN ADMIN */}
               {adminSection === 'tickets' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                  
-                  {/* ADMIN LIFETIME TICKET STATS */}
                   <TicketStatsGrid />
-
-                  <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px' }}>
-                    🎫 Recent Tickets (Last 90 Days)
-                  </h4>
+                  <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px' }}>🎫 Recent Tickets</h4>
                   <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: '15px' }}>Older tickets are hidden to keep your dashboard clean, but they are still counted in your lifetime stats above!</p>
                   
                   {visibleTickets.length === 0 ? <p style={{ color: '#8A2BE2', fontStyle: 'italic' }}>No recent tickets submitted.</p> : (
                     visibleTickets.map((ticket) => (
                       <div key={ticket.id} style={{ border: '2px solid #FDF0F5', borderRadius: '10px', padding: '15px', marginBottom: '15px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                          <strong>{ticket.premium_type || 'Unknown Item'}</strong>
+                          <strong style={{ fontSize: '1.1rem' }}>{ticket.premium_type || 'Unknown Item'}</strong>
                           <select value={ticket.status} onChange={(e) => updateTicketStatus(ticket.id, e.target.value)} style={{ padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', border: 'none', outline: 'none', backgroundColor: ticket.status === 'Completed' ? '#4ADE80' : ticket.status === 'In Progress' ? '#FBBF24' : '#FCA5A5', color: 'white' }}>
                             <option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Completed">Completed</option>
                           </select>
                         </div>
+                        <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888', fontWeight: 'bold' }}>Ticket ID: #{ticket.ticket_id || 'N/A'}</p>
                         <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Account Email: {ticket.contact_email || 'Not Provided'}</p>
                         <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Issue: {ticket.issue || 'Not Provided'}</p>
                         <button onClick={() => setExpandedTicketId(expandedTicketId === ticket.id ? null : ticket.id)} style={{ background: 'none', border: 'none', color: '#8A2BE2', fontWeight: 'bold', cursor: 'pointer', padding: 0, marginTop: '10px' }}>
@@ -353,7 +492,7 @@ export default function Home() {
                             <p style={{ margin: '3px 0' }}><strong>Date Purchased:</strong> {ticket.date_purchased || 'Not Provided'}</p>
                             <p style={{ margin: '3px 0' }}><strong>Date Reported:</strong> {ticket.date_reported || 'Not Provided'}</p>
                             <p style={{ margin: '3px 0' }}><strong>Remaining Days:</strong> {ticket.remaining_days || 'Not Provided'}</p>
-                            <p style={{ margin: '8px 0 0 0', paddingTop: '8px', borderTop: '1px dashed #D27DCE', color: '#8A2BE2' }}><strong>Personal Email (For Updates):</strong> {ticket.personal_email || 'Not Provided'}</p>
+                            <p style={{ margin: '8px 0 0 0', paddingTop: '8px', borderTop: '1px dashed #D27DCE', color: '#8A2BE2' }}><strong>Personal Email:</strong> {ticket.personal_email || 'Not Provided'}</p>
                           </div>
                         )}
                       </div>
@@ -382,8 +521,8 @@ export default function Home() {
                       <label style={{...labelStyle, marginTop: '20px'}}>Pricing Options:</label>
                       {editPrices.map((p, index) => (
                         <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                          <input type="text" value={p.label} onChange={(e) => updateEditPrice(index, 'label', e.target.value)} style={{...inputStyle, marginBottom: 0, flex: 2}} placeholder="Variant (e.g. 1 Month Solo)" />
-                          <input type="text" value={p.price} onChange={(e) => updateEditPrice(index, 'price', e.target.value)} style={{...inputStyle, marginBottom: 0, flex: 1}} placeholder="Price (e.g. ₱50)" />
+                          <input type="text" value={p.label} onChange={(e) => updateEditPrice(index, 'label', e.target.value)} style={{...inputStyle, marginBottom: 0, flex: 2}} placeholder="Variant" />
+                          <input type="text" value={p.price} onChange={(e) => updateEditPrice(index, 'price', e.target.value)} style={{...inputStyle, marginBottom: 0, flex: 1}} placeholder="Price" />
                           <button onClick={() => removePriceOption(index)} style={{ padding: '12px', borderRadius: '10px', backgroundColor: '#EF4444', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>X</button>
                         </div>
                       ))}
@@ -391,6 +530,54 @@ export default function Home() {
                       <button onClick={handleSaveProduct} style={{ width: '100%', padding: '15px', borderRadius: '10px', border: 'none', backgroundColor: '#8A2BE2', color: 'white', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(138,43,226,0.3)' }}>💾 Save Changes to Store</button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* NEW SERVICES MANAGER IN ADMIN */}
+              {adminSection === 'services' && (
+                <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                  <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem' }}>✨ Services Manager</h4>
+                  
+                  {/* List Existing Custom Services */}
+                  {dbServices.length > 0 && (
+                    <div style={{ marginBottom: '25px' }}>
+                      <label style={labelStyle}>Your Custom Services:</label>
+                      {dbServices.map(svc => (
+                        <div key={svc.id} style={{ border: '1px dashed #E6A8D7', padding: '15px', marginBottom: '10px', borderRadius: '10px', backgroundColor: '#FDF0F5' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ color: '#8A2BE2', fontSize: '1.1rem' }}>{svc.title}</strong>
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                              <button onClick={() => loadServiceToEdit(svc)} style={{ padding: '8px 12px', borderRadius: '5px', backgroundColor: '#8A2BE2', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Edit</button>
+                              <button onClick={() => handleDeleteService(svc.id)} style={{ padding: '8px 12px', borderRadius: '5px', backgroundColor: '#EF4444', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Delete</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Form to Add/Edit Service */}
+                  <div style={{ borderTop: '2px solid #FDF0F5', paddingTop: '20px' }}>
+                    <h5 style={{ color: '#8A2BE2', margin: '0 0 15px 0', fontSize: '1.1rem' }}>{editingSvcId ? '✏️ Edit Service' : '➕ Add New Service'}</h5>
+                    
+                    <label style={labelStyle}>Service Title:</label>
+                    <input type="text" value={svcTitle} onChange={e => setSvcTitle(e.target.value)} placeholder="(e.g. Domain Making)" style={inputStyle} />
+                    
+                    <label style={labelStyle}>Details / List (Line by line):</label>
+                    <textarea value={svcContent} onChange={e => setSvcContent(e.target.value)} placeholder="Type details here... Press Enter for a new line." rows={5} style={{...inputStyle, resize: 'vertical'}}></textarea>
+                    
+                    <label style={labelStyle}>Additional Note (Optional):</label>
+                    <input type="text" value={svcNote} onChange={e => setSvcNote(e.target.value)} placeholder="(e.g. ⓘ good for email hosting)" style={inputStyle} />
+                    
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button onClick={handleSaveService} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', backgroundColor: '#8A2BE2', color: 'white', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
+                        {editingSvcId ? '💾 Update Service' : '💾 Create Service'}
+                      </button>
+                      {editingSvcId && (
+                        <button onClick={cancelServiceEdit} style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #EF4444', backgroundColor: 'transparent', color: '#EF4444', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -424,52 +611,80 @@ export default function Home() {
             </div>
           )}
 
-          {/* VIEW: SERVICES */}
+          {/* VIEW: SERVICES (NOW DYNAMIC WITH ADMIN CONTROL) */}
           {activeTab === 'services' && (
             <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Services Offered</h3>
-              <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.4rem', margin: '0 0 15px 0', textAlign: 'center' }}>Boosting Service</h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
-                  {boostingCategories.map((category, idx) => (
-                    <button key={idx} onClick={() => setSelectedBoosting(category)} style={{ backgroundColor: '#8A2BE2', color: '#ffffff', border: 'none', borderRadius: '20px', padding: '10px 20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(138,43,226,0.3)' }}>{category}</button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '15px 20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                <div onClick={() => toggleService('moneyKeep')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-                  <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.2rem', margin: 0 }}>🍓 ，For Money keep : 🍀</h4>
-                  <span style={{ color: '#D27DCE', fontSize: '0.9rem', fontWeight: 'bold' }}>{openService === 'moneyKeep' ? '▴' : '▾'} 𝐢. read informations</span>
-                </div>
-                {openService === 'moneyKeep' && (
-                  <div style={{ marginTop: '15px', color: '#8A2BE2', fontSize: '0.95rem', lineHeight: '1.6' }}>
-                    <p style={{ margin: '5px 0' }}>‣ Only accepting Paymaya as payment method</p>
-                    <p style={{ margin: '5px 0' }}>‣ 5% dc</p>
-                    <p style={{ margin: '5px 0' }}>‣ fee is not included in 5% dc if bank transfer</p>
-                    <p style={{ margin: '5px 0' }}>‣ spam or ring me if unresponsive</p>
-                    <p style={{ margin: '5px 0' }}>‣ I accept rush and long term keep</p>
-                  </div>
-                )}
-              </div>
-              <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '15px 20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                <div onClick={() => toggleService('domainMaking')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-                  <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.2rem', margin: 0 }}>🍓 ，Domain Making</h4>
-                  <span style={{ color: '#D27DCE', fontSize: '0.9rem', fontWeight: 'bold' }}>{openService === 'domainMaking' ? '▴' : '▾'} 𝐢. read informations</span>
-                </div>
-                {openService === 'domainMaking' && (
-                  <div style={{ marginTop: '15px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', color: '#8A2BE2', fontSize: '0.95rem', marginBottom: '15px' }}>
-                      {domainPrices.map((domain, idx) => <p key={idx} style={{ margin: 0 }}>‣ {domain.ext} — {domain.price}</p>)}
+              
+              {dbServices.length > 0 ? (
+                // IF DB HAS CUSTOM SERVICES, SHOW THEM
+                dbServices.map(svc => (
+                  <div key={svc.id} style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                    <div onClick={() => toggleService(svc.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                      <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.3rem', margin: 0 }}>{svc.title}</h4>
+                      <span style={{ color: '#D27DCE', fontSize: '0.9rem', fontWeight: 'bold' }}>{openService === svc.id ? '▴' : '▾'} 𝐢. details</span>
                     </div>
-                    <div style={{ borderTop: '1px solid #E6A8D7', paddingTop: '10px', color: '#D27DCE', fontSize: '0.9rem' }}>
-                      <p style={{ margin: '3px 0' }}>ⓘ good for email hosting</p>
-                      <p style={{ margin: '3px 0' }}>ⓘ no warranty</p>
-                      <p style={{ margin: '3px 0' }}>ⓘ 1 year validity</p>
-                      <p style={{ margin: '3px 0' }}>ⓘ legally paid</p>
+                    {openService === svc.id && (
+                      <div style={{ marginTop: '15px' }}>
+                        <div style={{ whiteSpace: 'pre-wrap', color: '#8A2BE2', fontSize: '0.95rem', lineHeight: '1.8' }}>
+                          {svc.content}
+                        </div>
+                        {svc.note && (
+                          <div style={{ borderTop: '1px solid #E6A8D7', paddingTop: '10px', marginTop: '15px', color: '#D27DCE', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                            ⓘ {svc.note}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                // FALLBACK TO HARDCODED IF DB IS EMPTY
+                <>
+                  <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                    <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.4rem', margin: '0 0 15px 0', textAlign: 'center' }}>Boosting Service</h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
+                      {boostingCategories.map((category, idx) => (
+                        <button key={idx} onClick={() => setSelectedBoosting(category)} style={{ backgroundColor: '#8A2BE2', color: '#ffffff', border: 'none', borderRadius: '20px', padding: '10px 20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(138,43,226,0.3)' }}>{category}</button>
+                      ))}
                     </div>
                   </div>
-                )}
-              </div>
+                  <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '15px 20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                    <div onClick={() => toggleService('moneyKeep')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                      <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.2rem', margin: 0 }}>🍓 ，For Money keep : 🍀</h4>
+                      <span style={{ color: '#D27DCE', fontSize: '0.9rem', fontWeight: 'bold' }}>{openService === 'moneyKeep' ? '▴' : '▾'} 𝐢. read informations</span>
+                    </div>
+                    {openService === 'moneyKeep' && (
+                      <div style={{ marginTop: '15px', color: '#8A2BE2', fontSize: '0.95rem', lineHeight: '1.6' }}>
+                        <p style={{ margin: '5px 0' }}>‣ Only accepting Paymaya as payment method</p>
+                        <p style={{ margin: '5px 0' }}>‣ 5% dc</p>
+                        <p style={{ margin: '5px 0' }}>‣ fee is not included in 5% dc if bank transfer</p>
+                        <p style={{ margin: '5px 0' }}>‣ spam or ring me if unresponsive</p>
+                        <p style={{ margin: '5px 0' }}>‣ I accept rush and long term keep</p>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '15px 20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                    <div onClick={() => toggleService('domainMaking')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                      <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.2rem', margin: 0 }}>🍓 ，Domain Making</h4>
+                      <span style={{ color: '#D27DCE', fontSize: '0.9rem', fontWeight: 'bold' }}>{openService === 'domainMaking' ? '▴' : '▾'} 𝐢. read informations</span>
+                    </div>
+                    {openService === 'domainMaking' && (
+                      <div style={{ marginTop: '15px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', color: '#8A2BE2', fontSize: '0.95rem', marginBottom: '15px' }}>
+                          {domainPrices.map((domain, idx) => <p key={idx} style={{ margin: 0 }}>‣ {domain.ext} — {domain.price}</p>)}
+                        </div>
+                        <div style={{ borderTop: '1px solid #E6A8D7', paddingTop: '10px', color: '#D27DCE', fontSize: '0.9rem' }}>
+                          <p style={{ margin: '3px 0' }}>ⓘ good for email hosting</p>
+                          <p style={{ margin: '3px 0' }}>ⓘ no warranty</p>
+                          <p style={{ margin: '3px 0' }}>ⓘ 1 year validity</p>
+                          <p style={{ margin: '3px 0' }}>ⓘ legally paid</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -501,7 +716,7 @@ export default function Home() {
               </div>
 
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '25px 20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                <p style={{ color: '#D27DCE', fontSize: '0.95rem', textAlign: 'center', marginBottom: '15px', fontWeight: 'bold' }}>Please note that process can take 1-3 days, depending on the service purchased. You&apos;ll be notified once your service is fixed.</p>
+                <p style={{ color: '#D27DCE', fontSize: '0.95rem', textAlign: 'center', marginBottom: '15px', fontWeight: 'bold' }}>Please note that process can take 1-7 business days, depending on the service purchased. You&apos;ll be notified once your service is fixed.</p>
                 <div style={{ textAlign: 'center', whiteSpace: 'pre', fontFamily: 'monospace', color: '#8A2BE2', lineHeight: '1.2', margin: '20px 0', fontSize: '1.1rem', fontWeight: 'bold' }}>
                   {`❀ (\\  (\\ ❀\n(„• ֊ •„)\n╔─O─O─────────┓\n Report Form 🍀\n┗─────────────╝`}
                 </div>
@@ -570,21 +785,22 @@ export default function Home() {
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Live Ticket Status</h3>
               
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '25px 20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
-                
-                {/* PUBLIC LIFETIME TICKET STATS */}
                 <TicketStatsGrid />
+                <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.2rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px', textAlign: 'center' }}>Recent Tickets (Last 90 Days)</h4>
                 
-                <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.2rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px', textAlign: 'center' }}>
-                  Recent Tickets (Last 90 Days)
-                </h4>
-                
-                {visibleTickets.length === 0 ? <p style={{ textAlign: 'center', color: '#8A2BE2', fontStyle: 'italic' }}>No tickets are currently submitted.</p> : (
+                {/* SEARCH TICKET BAR */}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                  <input type="text" placeholder="🔍 Search by Ticket ID..." value={ticketSearch} onChange={e => setTicketSearch(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                </div>
+
+                {displayedPublicTickets.length === 0 ? <p style={{ textAlign: 'center', color: '#8A2BE2', fontStyle: 'italic' }}>No tickets found.</p> : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    {visibleTickets.map(ticket => (
+                    {displayedPublicTickets.map(ticket => (
                       <div key={ticket.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #E6A8D7', paddingBottom: '15px' }}>
                         <div>
                           <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#8A2BE2', fontSize: '1.1rem' }}>{ticket.premium_type || 'Unknown Premium'}</p>
-                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#888' }}>Submitted: {new Date(ticket.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#888' }}>Ticket ID: <span style={{fontWeight:'bold', color:'#D27DCE'}}>#{ticket.ticket_id || 'N/A'}</span></p>
+                          <p style={{ margin: '3px 0 0 0', fontSize: '0.85rem', color: '#888' }}>Submitted: {new Date(ticket.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                         </div>
                         <span style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 'bold', backgroundColor: ticket.status === 'Completed' ? '#DCFCE7' : ticket.status === 'In Progress' ? '#FEF3C7' : '#FEE2E2', color: ticket.status === 'Completed' ? '#166534' : ticket.status === 'In Progress' ? '#92400E' : '#991B1B' }}>
                           {ticket.status}
@@ -615,6 +831,25 @@ export default function Home() {
       </main>
 
       {/* GLOBAL POP-UPS */}
+      
+      {/* 1. SUCCESS POPUP MODAL */}
+      {showSuccessModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' }}>
+          <div style={{ backgroundColor: '#ffffff', padding: '30px', borderRadius: '20px', textAlign: 'center', maxWidth: '400px', width: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '3px solid #8A2BE2' }}>
+            <h2 style={{ color: '#22C55E', margin: '0 0 15px 0', fontSize: '2rem' }}>✅ Success!</h2>
+            <p style={{ color: '#8A2BE2', fontSize: '1.1rem', marginBottom: '15px', fontWeight: 'bold' }}>Your ticket has been submitted successfully.</p>
+            
+            <div style={{ backgroundColor: '#FDF0F5', padding: '20px', borderRadius: '10px', marginBottom: '20px', border: '2px dashed #E6A8D7' }}>
+              <p style={{ margin: 0, color: '#D27DCE', fontWeight: 'bold' }}>Your Ticket ID:</p>
+              <h3 style={{ margin: '5px 0 0 0', color: '#8A2BE2', fontSize: '2.5rem', letterSpacing: '3px' }}>#{successTicketId}</h3>
+            </div>
+            
+            <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px' }}>Please save this ID. You can track your live ticket status in the <strong>"Submitted Tickets"</strong> tab using this number.</p>
+            <button onClick={() => setShowSuccessModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '10px', backgroundColor: '#8A2BE2', color: 'white', fontWeight: 'bold', fontSize: '1.1rem', border: 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(138,43,226,0.3)' }}>Close</button>
+          </div>
+        </div>
+      )}
+
       {selectedProduct && (() => {
         const fallback = productDetails[selectedProduct];
         const dbData = dbProducts[selectedProduct];
