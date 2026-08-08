@@ -95,7 +95,7 @@ export default function Home() {
   const [svcContent, setSvcContent] = useState('');
   const [svcNote, setSvcNote] = useState('');
 
-  // Ticket Submission States (NEW POP-UP LOGIC)
+  // Ticket Submission States (POP-UP LOGIC)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -377,7 +377,7 @@ export default function Home() {
                     <div style={{ display: 'flex', marginBottom: '10px' }}>
                       <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ about :</strong>
                       <div>
-                        iʼll be ur seller, supplier,<br/>
+                        i&apos;ll be ur seller, supplier,<br/>
                         reseller, service provider,<br/>
                         mid, booster & keeper.
                       </div>
@@ -639,7 +639,7 @@ export default function Home() {
                   </div>
                 ))
               ) : (
-                // FALLBACK TO HARDCODED IF DB IS EMPTY
+                // FALLBACK TO HARDCODED IF DB IS EMPTY (Locks previous code safely)
                 <>
                   <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                     <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.4rem', margin: '0 0 15px 0', textAlign: 'center' }}>Boosting Service</h4>
@@ -844,7 +844,7 @@ export default function Home() {
               <h3 style={{ margin: '5px 0 0 0', color: '#8A2BE2', fontSize: '2.5rem', letterSpacing: '3px' }}>#{successTicketId}</h3>
             </div>
             
-            <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px' }}>Please save this ID. You can track your live ticket status in the <strong>"Submitted Tickets"</strong> tab using this number.</p>
+            <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px' }}>Please save this ID. You can track your live ticket status in the <strong>&quot;Submitted Tickets&quot;</strong> tab using this number.</p>
             <button onClick={() => setShowSuccessModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '10px', backgroundColor: '#8A2BE2', color: 'white', fontWeight: 'bold', fontSize: '1.1rem', border: 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(138,43,226,0.3)' }}>Close</button>
           </div>
         </div>
