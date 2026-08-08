@@ -65,7 +65,12 @@ const productDetails: Record<string, { prices?: { label: string; price: string }
 };
 
 const boostingCategories = ["Facebook", "Instagram", "Tiktok", "Telegram", "Youtube"];
-const domainPrices = [{ ext: ".online", price: "₱150" }, { ext: ".site", price: "₱150" }, { ext: ".website", price: "₱150" }, { ext: ".shop", price: "₱150" }, { ext: ".space", price: "₱150" }, { ext: ".fun", price: "₱150" }, { ext: ".icu", price: "₱150" }, { ext: ".life", price: "₱150" }, { ext: ".click", price: "₱170" }, { ext: ".xyz", price: "₱170" }, { ext: ".com", price: "₱150" }];
+const domainPrices = [
+  { ext: ".online", price: "₱150" }, { ext: ".site", price: "₱150" }, { ext: ".website", price: "₱150" }, 
+  { ext: ".shop", price: "₱150" }, { ext: ".space", price: "₱150" }, { ext: ".fun", price: "₱150" }, 
+  { ext: ".icu", price: "₱150" }, { ext: ".life", price: "₱150" }, { ext: ".click", price: "₱170" }, 
+  { ext: ".xyz", price: "₱170" }, { ext: ".com", price: "₱150" }
+];
 const acceptedPayments = ["Gcash", "Paymaya", "Gotyme", "Union Bank", "Cimb", "Maribank", "Paypal", "Pioneer", "Wise"];
 
 export default function Home() {
@@ -77,30 +82,35 @@ export default function Home() {
   const [openService, setOpenService] = useState<string | null>(null);
   const [openOwner, setOpenOwner] = useState(false);
 
+  // Database States
   const [dbProducts, setDbProducts] = useState<Record<string, { status: string, prices: any[] }>>({});
   const [dbServices, setDbServices] = useState<any[]>([]);
 
+  // Admin States
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPin, setAdminPin] = useState('');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState(false);
   const [adminSection, setAdminSection] = useState<'tickets' | 'products' | 'services'>('tickets');
   
+  // Edit Product States
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState('Available');
   const [editPrices, setEditPrices] = useState<{label: string, price: string}[]>([]);
 
+  // Edit Service States
   const [editingSvcId, setEditingSvcId] = useState<string | null>(null);
   const [svcTitle, setSvcTitle] = useState('');
   const [svcContent, setSvcContent] = useState('');
   const [svcNote, setSvcNote] = useState('');
 
-  // Ticket Submission States (POP-UP LOGIC)
+  // Ticket Submission States
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successTicketId, setSuccessTicketId] = useState('');
   
+  // Public Ticket States
   const [tickets, setTickets] = useState<any[]>([]);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
   const [ticketSearch, setTicketSearch] = useState('');
@@ -111,6 +121,7 @@ export default function Home() {
     date_purchased: '', date_reported: '', remaining_days: '', issue: ''
   });
 
+  // Effects
   useEffect(() => {
     fetchDbProducts();
     fetchDbServices();
@@ -159,10 +170,13 @@ export default function Home() {
     if (error) {
       setSubmitMessage('❌ Error submitting ticket. Please try again.');
     } else {
-      // SUCCESS! Show Pop-up and clear form
       setSuccessTicketId(generatedId);
       setShowSuccessModal(true);
-      setFormData({ premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '', account_password: '', subscription: '', solo_shared: '', purchased_price: '', date_purchased: '', date_reported: '', remaining_days: '', issue: '' });
+      setFormData({ 
+        premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '', 
+        account_password: '', subscription: '', solo_shared: '', purchased_price: '', date_purchased: '', 
+        date_reported: '', remaining_days: '', issue: '' 
+      });
       fetchTickets();
     }
     setIsSubmitting(false);
@@ -173,6 +187,7 @@ export default function Home() {
     fetchTickets();
   };
 
+  // Product Functions
   const handleSelectEditProduct = (name: string) => {
     setEditingProduct(name);
     const dbData = dbProducts[name];
@@ -180,50 +195,91 @@ export default function Home() {
     setEditStatus(dbData?.status || 'Available');
     setEditPrices(dbData?.prices || fallback?.prices || []);
   };
+
   const updateEditPrice = (index: number, field: 'label' | 'price', value: string) => {
     const newPrices = [...editPrices];
     newPrices[index][field] = value;
     setEditPrices(newPrices);
   };
+
   const addPriceOption = () => setEditPrices([...editPrices, { label: 'New Option', price: '₱0' }]);
   const removePriceOption = (index: number) => setEditPrices(editPrices.filter((_, i) => i !== index));
+
   const handleSaveProduct = async () => {
     if (!editingProduct) return;
     const { error } = await supabase.from('ruri_products').upsert({ product_name: editingProduct, status: editStatus, prices: editPrices });
-    if (!error) { alert('✅ Product Pricing Updated!'); fetchDbProducts(); } 
-    else { alert('❌ Error updating product.'); }
+    if (!error) { 
+      alert('✅ Product Pricing Updated!'); 
+      fetchDbProducts(); 
+    } else { 
+      alert('❌ Error updating product.'); 
+    }
   };
 
-  const loadServiceToEdit = (svc: any) => { setEditingSvcId(svc.id); setSvcTitle(svc.title); setSvcContent(svc.content); setSvcNote(svc.note || ''); };
-  const cancelServiceEdit = () => { setEditingSvcId(null); setSvcTitle(''); setSvcContent(''); setSvcNote(''); };
+  // Service Functions
+  const loadServiceToEdit = (svc: any) => { 
+    setEditingSvcId(svc.id); 
+    setSvcTitle(svc.title); 
+    setSvcContent(svc.content); 
+    setSvcNote(svc.note || ''); 
+  };
+
+  const cancelServiceEdit = () => { 
+    setEditingSvcId(null); 
+    setSvcTitle(''); 
+    setSvcContent(''); 
+    setSvcNote(''); 
+  };
+
   const handleSaveService = async () => {
     if (!svcTitle || !svcContent) return alert('Title and Content are required!');
     const payload = { title: svcTitle, content: svcContent, note: svcNote };
-    if (editingSvcId) { await supabase.from('ruri_services').update(payload).eq('id', editingSvcId); } 
-    else { await supabase.from('ruri_services').insert([payload]); }
+    
+    if (editingSvcId) { 
+      await supabase.from('ruri_services').update(payload).eq('id', editingSvcId); 
+    } else { 
+      await supabase.from('ruri_services').insert([payload]); 
+    }
+    
     alert('✅ Service saved successfully!');
     cancelServiceEdit();
     fetchDbServices();
   };
+
   const handleDeleteService = async (id: string) => {
-    if (confirm('Delete this service permanently?')) { await supabase.from('ruri_services').delete().eq('id', id); fetchDbServices(); }
+    if (confirm('Delete this service permanently?')) { 
+      await supabase.from('ruri_services').delete().eq('id', id); 
+      fetchDbServices(); 
+    }
   };
 
+  // UI Toggles
   const toggleCategory = (categoryName: string) => setOpenCategory(openCategory === categoryName ? null : categoryName);
   const toggleService = (serviceName: string) => setOpenService(openService === serviceName ? null : serviceName);
   const handleNav = (tab: string) => { setActiveTab(tab); setIsSidebarOpen(false); };
   
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminUsername === 'rurishopz' && adminPin === '192005') { setIsAdminLoggedIn(true); setLoginError(false); setAdminUsername(''); setAdminPin(''); } 
-    else { setLoginError(true); }
+    if (adminUsername === 'rurishopz' && adminPin === '192005') { 
+      setIsAdminLoggedIn(true); 
+      setLoginError(false); 
+      setAdminUsername(''); 
+      setAdminPin(''); 
+    } else { 
+      setLoginError(true); 
+    }
   };
-  const handleAdminLogout = () => { setIsAdminLoggedIn(false); setActiveTab('dashboard'); };
 
+  const handleAdminLogout = () => { 
+    setIsAdminLoggedIn(false); 
+    setActiveTab('dashboard'); 
+  };
+
+  // Styles
   const inputStyle = { width: '100%', padding: '12px 15px', borderRadius: '10px', border: '1px solid #E6A8D7', backgroundColor: '#FDF0F5', color: '#8A2BE2', marginBottom: '15px', fontFamily: textFont.style.fontFamily, outline: 'none', boxSizing: 'border-box' as const };
   const labelStyle = { display: 'block', color: '#8A2BE2', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.95rem' };
 
-  // --- STATS & 90-DAY LOGIC ---
+  // Ticket Data Calculation
   const totalTicketsCount = tickets.length;
   const pendingCount = tickets.filter(t => t.status === 'Pending').length;
   const inProgressCount = tickets.filter(t => t.status === 'In Progress').length;
@@ -265,8 +321,20 @@ export default function Home() {
     <div style={{ display: 'flex', height: '100vh', backgroundColor: '#FDF0F5', fontFamily: textFont.style.fontFamily, overflow: 'hidden' }}>
       
       {/* SIDEBAR NAVIGATION */}
-      <button onClick={() => setIsSidebarOpen(true)} style={{ position: 'fixed', top: '15px', left: '15px', zIndex: 50, backgroundColor: '#8A2BE2', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 15px', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>☰</button>
-      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 90 }} />}
+      <button 
+        onClick={() => setIsSidebarOpen(true)} 
+        style={{ position: 'fixed', top: '15px', left: '15px', zIndex: 50, backgroundColor: '#8A2BE2', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 15px', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}
+      >
+        ☰
+      </button>
+
+      {isSidebarOpen && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)} 
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 90 }} 
+        />
+      )}
+
       <nav style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: '280px', backgroundColor: '#FFD1DC', zIndex: 100, transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.3s ease-in-out', boxShadow: '4px 0 15px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ backgroundColor: '#000000', padding: '25px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 className={titleFont.className} style={{ color: '#FFD1DC', margin: 0, fontSize: '1.8rem', letterSpacing: '1px' }}>Ruri&apos;s Menu</h2>
@@ -282,7 +350,13 @@ export default function Home() {
             { id: 'public-tickets', label: '✅ Submitted Tickets' },
             { id: 'contact', label: '📞 Customer Service' }
           ].map((item) => (
-            <div key={item.id} onClick={() => handleNav(item.id)} style={{ padding: '15px 25px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', backgroundColor: activeTab === item.id ? '#000000' : 'transparent', color: activeTab === item.id ? '#FFD1DC' : '#000000', borderBottom: '1px solid rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>{item.label}</div>
+            <div 
+              key={item.id} 
+              onClick={() => handleNav(item.id)} 
+              style={{ padding: '15px 25px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', backgroundColor: activeTab === item.id ? '#000000' : 'transparent', color: activeTab === item.id ? '#FFD1DC' : '#000000', borderBottom: '1px solid rgba(0,0,0,0.05)', transition: 'all 0.2s' }}
+            >
+              {item.label}
+            </div>
           ))}
         </div>
       </nav>
@@ -291,13 +365,15 @@ export default function Home() {
       <main style={{ flex: 1, overflowY: 'auto', padding: '5rem 1rem 2rem 1rem', width: '100%' }}>
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
 
-          {/* DASHBOARD */}
+          {/* DASHBOARD VIEW */}
           {activeTab === 'dashboard' && (
             <div style={{ animation: 'fadeIn 0.5s' }}>
+              
               <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
                 <h1 className={titleFont.className} style={{ color: '#ffffff', fontSize: '5rem', letterSpacing: '3px', margin: '0', lineHeight: '1', textShadow: `-2px -2px 0 #8A2BE2, 2px -2px 0 #8A2BE2, -2px 2px 0 #8A2BE2, 2px 2px 0 #8A2BE2, 6px 6px 0 #8A2BE2, 0 0 25px #E6A8D7` }}>Ruri&apos;s Shop</h1>
                 <h2 className={subtitleFont.className} style={{ color: '#D27DCE', fontSize: '1.6rem', marginTop: '5px', letterSpacing: '1px' }}>Ruri&apos;s Digital Depot</h2>
               </div>
+              
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', borderLeft: '5px solid #8A2BE2', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                 <p style={{ color: '#8A2BE2', margin: 0, fontWeight: 'bold', fontSize: '1.05rem', lineHeight: '1.5' }}>⚠️ <span style={{ color: '#D27DCE' }}>Reminder:</span> Please note that the premium products are BMed; this simply means that possible errors/problems may occur on the account.</p>
               </div>
@@ -358,10 +434,18 @@ export default function Home() {
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.8rem', textAlign: 'center', marginBottom: '15px' }}>Navigate Here 👇</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '3rem' }}>
                 {[
-                  { id: 'products', label: '🛍️ Products', bg: '#8A2BE2', color: 'white' }, { id: 'services', label: '✨ Services', bg: '#D27DCE', color: 'white' },
-                  { id: 'payment', label: '💳 Payments', bg: '#ffffff', color: '#8A2BE2', border: '2px solid #8A2BE2' }, { id: 'reports', label: '🎫 Submit Ticket', bg: '#ffffff', color: '#D27DCE', border: '2px solid #D27DCE' }
+                  { id: 'products', label: '🛍️ Products', bg: '#8A2BE2', color: 'white' }, 
+                  { id: 'services', label: '✨ Services', bg: '#D27DCE', color: 'white' },
+                  { id: 'payment', label: '💳 Payments', bg: '#ffffff', color: '#8A2BE2', border: '2px solid #8A2BE2' }, 
+                  { id: 'reports', label: '🎫 Submit Ticket', bg: '#ffffff', color: '#D27DCE', border: '2px solid #D27DCE' }
                 ].map((btn) => (
-                  <button key={btn.id} onClick={() => handleNav(btn.id)} style={{ backgroundColor: btn.bg, color: btn.color, border: btn.border || 'none', padding: '15px', borderRadius: '15px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>{btn.label}</button>
+                  <button 
+                    key={btn.id} 
+                    onClick={() => handleNav(btn.id)} 
+                    style={{ backgroundColor: btn.bg, color: btn.color, border: btn.border || 'none', padding: '15px', borderRadius: '15px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
+                  >
+                    {btn.label}
+                  </button>
                 ))}
               </div>
 
@@ -371,6 +455,7 @@ export default function Home() {
                   <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', margin: 0, fontSize: '1.4rem' }}>🌸 About Owner</h3>
                   <span style={{ color: '#D27DCE', fontSize: '1.2rem', fontWeight: 'bold' }}>{openOwner ? '▴' : '▾'}</span>
                 </div>
+                
                 {openOwner && (
                   <div style={{ marginTop: '15px', color: '#8A2BE2', fontSize: '0.95rem', lineHeight: '1.6' }}>
                     
@@ -406,7 +491,9 @@ export default function Home() {
 
                     <div style={{ display: 'flex', marginBottom: '10px' }}>
                       <strong style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>ෆ proofs & vouches :</strong>
-                      <div><a href="https://t.me/rurishoppu" target="_blank" rel="noopener noreferrer" style={{color:'#D27DCE', textDecoration:'none', fontWeight:'bold'}}>https://t.me/rurishoppu</a></div>
+                      <div>
+                        <a href="https://t.me/rurishoppu" target="_blank" rel="noopener noreferrer" style={{color:'#D27DCE', textDecoration:'none', fontWeight:'bold'}}>https://t.me/rurishoppu</a>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', marginBottom: '10px' }}>
@@ -416,7 +503,12 @@ export default function Home() {
                     
                     <hr style={{ border: '1px dashed #E6A8D7', margin: '15px 0' }} />
                     
-                    <p style={{ margin: '5px 0' }}><strong>more about owner:</strong><br/>age: 21 | pronouns: she, her<br/>zodiac: cancer | stats: nbsb<br/>cat lover & sweet tooth</p>
+                    <p style={{ margin: '5px 0' }}>
+                      <strong>more about owner:</strong><br/>
+                      age: 21 | pronouns: she, her<br/>
+                      zodiac: cancer | stats: nbsb<br/>
+                      cat lover & sweet tooth
+                    </p>
                     
                     <div style={{ backgroundColor: '#FDF0F5', padding: '12px', borderRadius: '8px', marginTop: '15px', fontSize: '0.85rem', fontWeight: 'bold', color: '#D27DCE' }}>
                       just to set clear a expectation that the owner has a full-time job and is unable to address your concerns immediately. aside from that, she has other hustles during her free time. if unresponsive, she might be busy, on-duty, or asleep. spamming is not allowed unless stated as important.
@@ -425,8 +517,10 @@ export default function Home() {
                 )}
               </div>
 
+              {/* ADMIN LOGIN */}
               <div style={{ backgroundColor: '#000000', borderRadius: '20px', padding: '25px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
                 <h3 className={subtitleFont.className} style={{ color: '#FFD1DC', margin: '0 0 15px 0', fontSize: '1.4rem', textAlign: 'center' }}>🔒 Admin Tool</h3>
+                
                 {isAdminLoggedIn ? (
                   <div style={{ textAlign: 'center' }}>
                     <p style={{ color: '#4ADE80', fontWeight: 'bold', marginBottom: '15px' }}>✅ Login Successful!</p>
@@ -448,36 +542,53 @@ export default function Home() {
           {/* VIEW: ADMIN PANEL */}
           {activeTab === 'admin' && isAdminLoggedIn && (
             <div style={{ animation: 'fadeIn 0.5s' }}>
+              
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', margin: 0 }}>⚙️ Admin Panel</h3>
                 <button onClick={handleAdminLogout} style={{ padding: '8px 15px', borderRadius: '10px', backgroundColor: '#EF4444', color: 'white', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Logout</button>
               </div>
+              
               <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
                 <button onClick={() => setAdminSection('tickets')} style={{ flex: 1, minWidth: '100px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'tickets' ? '#8A2BE2' : '#ffffff', color: adminSection === 'tickets' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🎫 Tickets</button>
                 <button onClick={() => setAdminSection('products')} style={{ flex: 1, minWidth: '100px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'products' ? '#8A2BE2' : '#ffffff', color: adminSection === 'products' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>🛍️ Products</button>
                 <button onClick={() => setAdminSection('services')} style={{ flex: 1, minWidth: '100px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === 'services' ? '#8A2BE2' : '#ffffff', color: adminSection === 'services' ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>✨ Services</button>
               </div>
 
-              {/* TICKET SECTION IN ADMIN */}
+              {/* ADMIN: TICKETS */}
               {adminSection === 'tickets' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                  
                   <TicketStatsGrid />
+                  
                   <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px' }}>🎫 Recent Tickets</h4>
                   <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: '15px' }}>Older tickets are hidden to keep your dashboard clean, but they are still counted in your lifetime stats above!</p>
                   
-                  {visibleTickets.length === 0 ? <p style={{ color: '#8A2BE2', fontStyle: 'italic' }}>No recent tickets submitted.</p> : (
+                  {visibleTickets.length === 0 ? (
+                    <p style={{ color: '#8A2BE2', fontStyle: 'italic' }}>No recent tickets submitted.</p>
+                  ) : (
                     visibleTickets.map((ticket) => (
                       <div key={ticket.id} style={{ border: '2px solid #FDF0F5', borderRadius: '10px', padding: '15px', marginBottom: '15px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                           <strong style={{ fontSize: '1.1rem' }}>{ticket.premium_type || 'Unknown Item'}</strong>
-                          <select value={ticket.status} onChange={(e) => updateTicketStatus(ticket.id, e.target.value)} style={{ padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', border: 'none', outline: 'none', backgroundColor: ticket.status === 'Completed' ? '#4ADE80' : ticket.status === 'In Progress' ? '#FBBF24' : '#FCA5A5', color: 'white' }}>
-                            <option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Completed">Completed</option>
+                          <select 
+                            value={ticket.status} 
+                            onChange={(e) => updateTicketStatus(ticket.id, e.target.value)} 
+                            style={{ padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', border: 'none', outline: 'none', backgroundColor: ticket.status === 'Completed' ? '#4ADE80' : ticket.status === 'In Progress' ? '#FBBF24' : '#FCA5A5', color: 'white' }}
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
                           </select>
                         </div>
+                        
                         <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888', fontWeight: 'bold' }}>Ticket ID: #{ticket.ticket_id || 'N/A'}</p>
                         <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Account Email: {ticket.contact_email || 'Not Provided'}</p>
                         <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#888' }}>Issue: {ticket.issue || 'Not Provided'}</p>
-                        <button onClick={() => setExpandedTicketId(expandedTicketId === ticket.id ? null : ticket.id)} style={{ background: 'none', border: 'none', color: '#8A2BE2', fontWeight: 'bold', cursor: 'pointer', padding: 0, marginTop: '10px' }}>
+                        
+                        <button 
+                          onClick={() => setExpandedTicketId(expandedTicketId === ticket.id ? null : ticket.id)} 
+                          style={{ background: 'none', border: 'none', color: '#8A2BE2', fontWeight: 'bold', cursor: 'pointer', padding: 0, marginTop: '10px' }}
+                        >
                           {expandedTicketId === ticket.id ? 'Hide Details ▲' : 'View Full Details ▼'}
                         </button>
 
@@ -501,23 +612,34 @@ export default function Home() {
                 </div>
               )}
 
-              {/* PRODUCTS MANAGER IN ADMIN */}
+              {/* ADMIN: PRODUCTS */}
               {adminSection === 'products' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                   <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem' }}>🛍️ Product Manager</h4>
+                  
                   <label style={labelStyle}>Select a Product to Edit:</label>
-                  <select value={editingProduct || ''} onChange={(e) => handleSelectEditProduct(e.target.value)} style={{...inputStyle, marginBottom: '25px'}}>
+                  <select 
+                    value={editingProduct || ''} 
+                    onChange={(e) => handleSelectEditProduct(e.target.value)} 
+                    style={{...inputStyle, marginBottom: '25px'}}
+                  >
                     <option value="">-- Choose a Product --</option>
                     {allProductNames.map(name => <option key={name} value={name}>{name}</option>)}
                   </select>
+
                   {editingProduct && (
                     <div style={{ borderTop: '2px dashed #E6A8D7', paddingTop: '20px' }}>
                       <label style={labelStyle}>Availability Status:</label>
-                      <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} style={{...inputStyle, backgroundColor: editStatus === 'Out of Stock' ? '#FEE2E2' : '#DCFCE7', color: editStatus === 'Out of Stock' ? '#EF4444' : '#22C55E', fontWeight: 'bold'}}>
+                      <select 
+                        value={editStatus} 
+                        onChange={(e) => setEditStatus(e.target.value)} 
+                        style={{...inputStyle, backgroundColor: editStatus === 'Out of Stock' ? '#FEE2E2' : '#DCFCE7', color: editStatus === 'Out of Stock' ? '#EF4444' : '#22C55E', fontWeight: 'bold'}}
+                      >
                         <option value="Available">Available</option>
                         <option value="Out of Stock">Out of Stock</option>
                         <option value="Restocking">Restocking</option>
                       </select>
+                      
                       <label style={{...labelStyle, marginTop: '20px'}}>Pricing Options:</label>
                       {editPrices.map((p, index) => (
                         <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
@@ -526,6 +648,7 @@ export default function Home() {
                           <button onClick={() => removePriceOption(index)} style={{ padding: '12px', borderRadius: '10px', backgroundColor: '#EF4444', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>X</button>
                         </div>
                       ))}
+                      
                       <button onClick={addPriceOption} style={{ padding: '10px 15px', borderRadius: '10px', backgroundColor: 'transparent', color: '#8A2BE2', border: '2px dashed #8A2BE2', cursor: 'pointer', fontWeight: 'bold', width: '100%', marginBottom: '25px' }}>+ Add Price Option</button>
                       <button onClick={handleSaveProduct} style={{ width: '100%', padding: '15px', borderRadius: '10px', border: 'none', backgroundColor: '#8A2BE2', color: 'white', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(138,43,226,0.3)' }}>💾 Save Changes to Store</button>
                     </div>
@@ -533,12 +656,11 @@ export default function Home() {
                 </div>
               )}
 
-              {/* NEW SERVICES MANAGER IN ADMIN */}
+              {/* ADMIN: SERVICES */}
               {adminSection === 'services' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                   <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem' }}>✨ Services Manager</h4>
                   
-                  {/* List Existing Custom Services */}
                   {dbServices.length > 0 && (
                     <div style={{ marginBottom: '25px' }}>
                       <label style={labelStyle}>Your Custom Services:</label>
@@ -556,7 +678,6 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Form to Add/Edit Service */}
                   <div style={{ borderTop: '2px solid #FDF0F5', paddingTop: '20px' }}>
                     <h5 style={{ color: '#8A2BE2', margin: '0 0 15px 0', fontSize: '1.1rem' }}>{editingSvcId ? '✏️ Edit Service' : '➕ Add New Service'}</h5>
                     
@@ -582,6 +703,7 @@ export default function Home() {
               )}
             </div>
           )}
+
           {activeTab === 'admin' && !isAdminLoggedIn && (
             <div style={{ textAlign: 'center', marginTop: '50px' }}>
               <h2 style={{ color: '#EF4444' }}>Access Denied</h2>
@@ -611,13 +733,12 @@ export default function Home() {
             </div>
           )}
 
-          {/* VIEW: SERVICES (NOW DYNAMIC WITH ADMIN CONTROL) */}
+          {/* VIEW: SERVICES */}
           {activeTab === 'services' && (
             <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Services Offered</h3>
               
               {dbServices.length > 0 ? (
-                // IF DB HAS CUSTOM SERVICES, SHOW THEM
                 dbServices.map(svc => (
                   <div key={svc.id} style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                     <div onClick={() => toggleService(svc.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
@@ -634,12 +755,17 @@ export default function Home() {
                             ⓘ {svc.note}
                           </div>
                         )}
+                        
+                        {/* THE DYNAMIC SERVICE BUTTONS */}
+                        <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '20px' }}>
+                          <button onClick={() => setOpenService(null)} style={{ flex: 1, padding: '10px 0', borderRadius: '10px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>Not Now</button>
+                          <a href="https://t.me/strobariii" target="_blank" rel="noopener noreferrer" style={{ flex: 1, padding: '10px 0', borderRadius: '10px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Contact Owner</a>
+                        </div>
                       </div>
                     )}
                   </div>
                 ))
               ) : (
-                // FALLBACK TO HARDCODED IF DB IS EMPTY (Locks previous code safely)
                 <>
                   <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                     <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.4rem', margin: '0 0 15px 0', textAlign: 'center' }}>Boosting Service</h4>
@@ -707,7 +833,7 @@ export default function Home() {
              </div>
           )}
 
-          {/* VIEW: REPORTS (UPDATED LAYOUT) */}
+          {/* VIEW: REPORTS */}
           {activeTab === 'reports' && (
              <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Report Forms</h3>
@@ -748,7 +874,9 @@ export default function Home() {
                   
                   <label style={labelStyle}>⩇ solo / shared :</label>
                   <select name="solo_shared" value={formData.solo_shared} onChange={handleInputChange} style={inputStyle}>
-                    <option value="">Select option...</option><option value="solo">Solo</option><option value="shared">Shared</option>
+                    <option value="">Select option...</option>
+                    <option value="solo">Solo</option>
+                    <option value="shared">Shared</option>
                   </select>
                   
                   <label style={labelStyle}>⩇ purchased price :</label>
@@ -771,10 +899,6 @@ export default function Home() {
 
                   <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', backgroundColor: isSubmitting ? '#ccc' : '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: isSubmitting ? 'not-allowed' : 'pointer', marginTop: '10px', boxShadow: '0 2px 5px rgba(138,43,226,0.3)' }}>Submit Report</button>
                 </form>
-                <div style={{ marginTop: '25px', padding: '15px', backgroundColor: '#FDF0F5', borderRadius: '10px', borderLeft: '4px solid #D27DCE', color: '#8A2BE2', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                  <span style={{ color: '#D27DCE', fontWeight: 'bold' }}>ⓘ Take note:</span> This is only for those who activated their warranties. Contact us at <a href="mailto:ruris.digitaldepot@rurika.shop" style={{ color: '#D27DCE', fontWeight: 'bold', textDecoration: 'none' }}>ruris.digitaldepot@rurika.shop</a> if you encountered an issue. <br/><br/>
-                  <span style={{ fontSize: '0.85rem' }}>(Subject should be: Report Form - type of service availed e.g., Report Form - Netflix)</span>
-                </div>
               </div>
              </div>
           )}
@@ -785,10 +909,11 @@ export default function Home() {
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Live Ticket Status</h3>
               
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '25px 20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                
                 <TicketStatsGrid />
+                
                 <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.2rem', borderTop: '2px dashed #FDF0F5', paddingTop: '15px', textAlign: 'center' }}>Recent Tickets (Last 90 Days)</h4>
                 
-                {/* SEARCH TICKET BAR */}
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                   <input type="text" placeholder="🔍 Search by Ticket ID..." value={ticketSearch} onChange={e => setTicketSearch(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
                 </div>
