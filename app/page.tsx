@@ -511,7 +511,7 @@ export default function Home() {
                     </p>
                     
                     <div style={{ backgroundColor: '#FDF0F5', padding: '12px', borderRadius: '8px', marginTop: '15px', fontSize: '0.85rem', fontWeight: 'bold', color: '#D27DCE' }}>
-                      just to set clear a expectation that the owner has a full-time job and is unable to address your concerns immediately. aside from that, she has other hustles during her free time. if unresponsive, she might be busy, on-duty, or asleep. spamming is not allowed unless stated as important.
+                      just to set a clear expectation that the owner has a full-time job and is unable to address your concerns immediately. aside from that, she has other hustles during her free time. if unresponsive, she might be busy, on-duty, or asleep. spamming is not allowed unless stated as important.
                     </div>
                   </div>
                 )}
