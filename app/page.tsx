@@ -75,33 +75,38 @@ const acceptedPayments = ["Gcash", "Paymaya", "Gotyme", "Union Bank", "Cimb", "M
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [openOwner, setOpenOwner] = useState(false);
+
+  // Category & Legacy Toggles
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [selectedBoosting, setSelectedBoosting] = useState<string | null>(null);
   const [openService, setOpenService] = useState<string | null>(null);
-  const [openOwner, setOpenOwner] = useState(false);
 
-  // Database States
-  const [dbProducts, setDbProducts] = useState<Record<string, { status: string, prices: any[] }>>({});
-  const [dbServices, setDbServices] = useState<any[]>([]);
-  
-  // New Digital Store States
+  // Digital Products & Rules Toggle
   const [dbDigitalProducts, setDbDigitalProducts] = useState<any[]>([]);
   const [activeDigitalProduct, setActiveDigitalProduct] = useState<any>(null);
+  const [openDigitalRules, setOpenDigitalRules] = useState(false);
 
-  // New Free Request & Referral States
+  // Media Upload States (Supabase Storage)
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+
+  // Database Synced Records
+  const [dbProducts, setDbProducts] = useState<Record<string, { status: string, prices: any[] }>>({});
+  const [dbServices, setDbServices] = useState<any[]>([]);
   const [dbReferralCodes, setDbReferralCodes] = useState<any[]>([]);
   const [dbFreeRequests, setDbFreeRequests] = useState<any[]>([]);
   const [newReferralCode, setNewReferralCode] = useState('');
 
-  // Admin States
+  // Admin Authentication & Sub-tabs
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPin, setAdminPin] = useState('');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState(false);
   const [adminSection, setAdminSection] = useState<'tickets' | 'products' | 'services' | 'digital-products' | 'free-requests' | 'referrals'>('tickets');
   
-  // Edit States
+  // Admin Editing Forms
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState('Available');
   const [editPrices, setEditPrices] = useState<{label: string, price: string}[]>([]);
@@ -110,36 +115,65 @@ export default function Home() {
   const [svcTitle, setSvcTitle] = useState('');
   const [svcContent, setSvcContent] = useState('');
   const [svcNote, setSvcNote] = useState('');
-  
+
   const [editingDpId, setEditingDpId] = useState<string | null>(null);
   const [dpForm, setDpForm] = useState({
-    title: '', price: '', category: '', cover_url: '', previews: '', video_url: '', file_url: '', external_link: '',
-    short_desc: '', full_desc: '', includes: '', format: '', notes: '', is_free: false
+    title: '', 
+    price: '', 
+    category: '', 
+    cover_url: '', 
+    previews: '', 
+    video_url: '', 
+    file_url: '', 
+    external_link: '',
+    short_desc: '', 
+    full_desc: '', 
+    includes: '', 
+    format: '', 
+    notes: '', 
+    is_free: false
   });
 
-  // Ticket Submission States
+  // Ticket Submission & Stats
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successTicketId, setSuccessTicketId] = useState('');
-  
   const [tickets, setTickets] = useState<any[]>([]);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
   const [ticketSearch, setTicketSearch] = useState('');
 
   const [formData, setFormData] = useState({
-    premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '',
-    account_password: '', subscription: '', solo_shared: '', purchased_price: '',
-    date_purchased: '', date_reported: '', remaining_days: '', issue: ''
+    premium_type: '', 
+    telegram_username: '', 
+    first_email: '', 
+    contact_email: '', 
+    personal_email: '',
+    account_password: '', 
+    subscription: '', 
+    solo_shared: '', 
+    purchased_price: '',
+    date_purchased: '', 
+    date_reported: '', 
+    remaining_days: '', 
+    issue: ''
   });
 
-  // FREE ACCESS MODAL STATES
+  // Free Digital Creator Starter Guide Modal State
   const [freeModal, setFreeModal] = useState({ 
-    open: false, step: 1, source: '', otherSource: '', referralCode: '',
-    igUsername: '', ruriUsername: '', name: '', platformLink: '', email: ''
+    open: false, 
+    step: 1, 
+    source: '', 
+    otherSource: '', 
+    referralCode: '',
+    igUsername: '', 
+    ruriUsername: '', 
+    igName: '', 
+    email: '',
+    screenshotSent: false
   });
 
-  // Effects
+  // Initial Data Fetching
   useEffect(() => { 
     fetchDbProducts(); 
     fetchDbServices(); 
@@ -190,6 +224,36 @@ export default function Home() {
     if (data) setDbFreeRequests(data);
   };
 
+  // Media Upload Handler (Images & Videos directly to Supabase Storage)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'cover_url' | 'video_url') => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      if (field === 'cover_url') setUploadingCover(true);
+      if (field === 'video_url') setUploadingVideo(true);
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${field === 'cover_url' ? 'covers' : 'videos'}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-media')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('product-media').getPublicUrl(filePath);
+      setDpForm(prev => ({ ...prev, [field]: data.publicUrl }));
+      alert(`✅ ${field === 'cover_url' ? 'Image' : 'Video'} uploaded successfully from gallery/files!`);
+    } catch (err: any) {
+      alert('Upload error: ' + (err.message || 'Make sure you have created the public "product-media" storage bucket in Supabase.'));
+    } finally {
+      if (field === 'cover_url') setUploadingCover(false);
+      if (field === 'video_url') setUploadingVideo(false);
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -209,7 +273,11 @@ export default function Home() {
     } else {
       setSuccessTicketId(generatedId); 
       setShowSuccessModal(true);
-      setFormData({ premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '', account_password: '', subscription: '', solo_shared: '', purchased_price: '', date_purchased: '', date_reported: '', remaining_days: '', issue: '' });
+      setFormData({ 
+        premium_type: '', telegram_username: '', first_email: '', contact_email: '', personal_email: '', 
+        account_password: '', subscription: '', solo_shared: '', purchased_price: '', date_purchased: '', 
+        date_reported: '', remaining_days: '', issue: '' 
+      });
       fetchTickets();
     }
     setIsSubmitting(false);
@@ -220,33 +288,47 @@ export default function Home() {
     fetchTickets(); 
   };
 
-  // Free Access Flow Logic
+  // Free Digital Creator Starter Guide Access Flow
   const handleNextFreeStep = async () => {
     if (freeModal.step === 1) {
-      if (!freeModal.source) return alert("Please select an option to continue.");
-      if (freeModal.source === 'Other' && !freeModal.otherSource.trim()) return alert("Please specify where you found us.");
+      if (!freeModal.source) return alert("Please select where you heard about the free guide.");
+      if (freeModal.source === 'Other' && !freeModal.otherSource.trim()) return alert("Please specify the platform.");
+      setFreeModal({ ...freeModal, step: 2 });
+      return;
     }
     
     if (freeModal.step === 2) {
       if (freeModal.source === 'Instagram' || freeModal.source === 'TikTok') {
-        if (!freeModal.igUsername || !freeModal.ruriUsername || !freeModal.email) return alert("All fields are required to verify your follow and send the product!");
+        if (!freeModal.igUsername.trim() || !freeModal.ruriUsername.trim() || !freeModal.email.trim()) {
+          return alert("Please fill in your username, our account username you followed, and your email.");
+        }
         
         await supabase.from('ruri_free_requests').insert([{
           platform: freeModal.source,
           user_username: freeModal.igUsername,
           ruri_username: freeModal.ruriUsername,
           email: freeModal.email,
-          screenshot_url: 'Sent to Telegram',
+          screenshot_url: 'Optional Proof Via Channels',
           status: 'Pending'
         }]);
         setFreeModal({ ...freeModal, step: 3 });
 
       } else {
-        if (freeModal.source === 'Referral' && !freeModal.referralCode) return alert("Please enter a valid Referral Code.");
-        if (!freeModal.name || !freeModal.platformLink || !freeModal.email) return alert("Please fill in all details.");
+        // Facebook, Referral, Other Flow
+        if (freeModal.source === 'Referral' && !freeModal.referralCode.trim()) {
+          return alert("Please enter your valid Referral Code.");
+        }
+        if (!freeModal.igName.trim() || !freeModal.igUsername.trim() || !freeModal.email.trim()) {
+          return alert("Please fill in your Instagram Name, Instagram Username, and Email.");
+        }
         
         if (freeModal.source === 'Referral') {
-          const { data } = await supabase.from('ruri_referral_codes').select('*').eq('code', freeModal.referralCode).eq('is_used', false).single();
+          const { data } = await supabase.from('ruri_referral_codes')
+            .select('*')
+            .eq('code', freeModal.referralCode.trim())
+            .eq('is_used', false)
+            .single();
+
           if (!data) return alert("Invalid or already used Referral Code.");
           await supabase.from('ruri_referral_codes').update({ is_used: true }).eq('id', data.id);
         }
@@ -254,70 +336,99 @@ export default function Home() {
         await supabase.from('ruri_free_requests').insert([{
           platform: freeModal.source === 'Other' ? freeModal.otherSource : freeModal.source,
           referral_code: freeModal.referralCode,
-          user_username: freeModal.name,
-          platform_link: freeModal.platformLink,
+          user_username: freeModal.igUsername, // Instagram Username
+          ruri_username: freeModal.igName,     // Instagram Name
           email: freeModal.email,
-          screenshot_url: 'Sent to Telegram',
+          screenshot_url: 'Optional Proof Via Channels',
           status: 'Pending'
         }]);
 
         setFreeModal({ ...freeModal, step: 3 });
       }
-    } else {
-      setFreeModal({ ...freeModal, step: freeModal.step + 1 });
     }
   };
 
-  const handleCreateReferralCode = async () => {
-    if (!newReferralCode) return;
-    await supabase.from('ruri_referral_codes').insert([{ code: newReferralCode }]);
-    setNewReferralCode('');
-    fetchReferrals();
+  const handleCreateReferralCode = async () => { 
+    if (!newReferralCode.trim()) return; 
+    await supabase.from('ruri_referral_codes').insert([{ code: newReferralCode.trim() }]); 
+    setNewReferralCode(''); 
+    fetchReferrals(); 
   };
 
-  const updateFreeRequestStatus = async (id: string, newStatus: string) => {
-    await supabase.from('ruri_free_requests').update({ status: newStatus }).eq('id', id);
-    fetchFreeRequests();
+  const updateFreeRequestStatus = async (id: string, newStatus: string) => { 
+    await supabase.from('ruri_free_requests').update({ status: newStatus }).eq('id', id); 
+    fetchFreeRequests(); 
   };
 
-  const handleDpChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target as HTMLInputElement;
-    setDpForm({ ...dpForm, [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value });
+  // Digital Product Handlers
+  const handleDpChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { 
+    const { name, value, type } = e.target as HTMLInputElement; 
+    setDpForm({ ...dpForm, [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value }); 
   };
 
-  const loadDpToEdit = (dp: any) => {
-    setEditingDpId(dp.id);
-    setDpForm({
-      title: dp.title || '', price: dp.price || '', category: dp.category || '', cover_url: dp.cover_url || '',
-      previews: dp.previews ? dp.previews.join(', ') : '', video_url: dp.video_url || '', file_url: dp.file_url || '', external_link: dp.external_link || '',
-      short_desc: dp.short_desc || '', full_desc: dp.full_desc || '', includes: dp.includes ? dp.includes.join(', ') : '', format: dp.format || '', notes: dp.notes || '', is_free: dp.is_free || false
-    });
+  const loadDpToEdit = (dp: any) => { 
+    setEditingDpId(dp.id); 
+    setDpForm({ 
+      title: dp.title || '', 
+      price: dp.price || '', 
+      category: dp.category || '', 
+      cover_url: dp.cover_url || '', 
+      previews: dp.previews ? (Array.isArray(dp.previews) ? dp.previews.join(', ') : dp.previews) : '', 
+      video_url: dp.video_url || '', 
+      file_url: dp.file_url || '', 
+      external_link: dp.external_link || '', 
+      short_desc: dp.short_desc || '', 
+      full_desc: dp.full_desc || '', 
+      includes: dp.includes ? (Array.isArray(dp.includes) ? dp.includes.join(', ') : dp.includes) : '', 
+      format: dp.format || '', 
+      notes: dp.notes || '', 
+      is_free: dp.is_free || false 
+    }); 
   };
 
   const cancelDpEdit = () => { 
     setEditingDpId(null); 
-    setDpForm({ title: '', price: '', category: '', cover_url: '', previews: '', video_url: '', file_url: '', external_link: '', short_desc: '', full_desc: '', includes: '', format: '', notes: '', is_free: false }); 
+    setDpForm({ 
+      title: '', price: '', category: '', cover_url: '', previews: '', video_url: '', 
+      file_url: '', external_link: '', short_desc: '', full_desc: '', includes: '', 
+      format: '', notes: '', is_free: false 
+    }); 
   };
 
-  const handleSaveDp = async () => {
-    if (!dpForm.title) return alert("Title is required.");
-    const previewArray = dpForm.previews.split(',').map(s => s.trim()).filter(s => s);
-    const includesArray = dpForm.includes.split(',').map(s => s.trim()).filter(s => s);
-    const payload = {
-      title: dpForm.title, price: dpForm.price, category: dpForm.category, cover_url: dpForm.cover_url,
-      previews: previewArray, video_url: dpForm.video_url, file_url: dpForm.file_url, external_link: dpForm.external_link,
-      short_desc: dpForm.short_desc, full_desc: dpForm.full_desc, includes: includesArray,
-      format: dpForm.format, notes: dpForm.notes, is_free: dpForm.is_free
-    };
+  const handleSaveDp = async () => { 
+    if (!dpForm.title) return alert("Product title is required."); 
+    const previewArray = typeof dpForm.previews === 'string' 
+      ? dpForm.previews.split(',').map(s => s.trim()).filter(s => s) 
+      : [];
+    const includesArray = typeof dpForm.includes === 'string' 
+      ? dpForm.includes.split(',').map(s => s.trim()).filter(s => s) 
+      : [];
+      
+    const payload = { 
+      title: dpForm.title, 
+      price: dpForm.price, 
+      category: dpForm.category, 
+      cover_url: dpForm.cover_url, 
+      previews: previewArray, 
+      video_url: dpForm.video_url, 
+      file_url: dpForm.file_url, 
+      external_link: dpForm.external_link, 
+      short_desc: dpForm.short_desc, 
+      full_desc: dpForm.full_desc, 
+      includes: includesArray, 
+      format: dpForm.format, 
+      notes: dpForm.notes, 
+      is_free: dpForm.is_free 
+    }; 
     
-    if (editingDpId) { 
+    if (editingDpId) {
       await supabase.from('ruri_digital_products').update(payload).eq('id', editingDpId); 
-    } else { 
+    } else {
       await supabase.from('ruri_digital_products').insert([payload]); 
     }
-    alert('✅ Digital Product Saved!'); 
+    alert('✅ Digital Product Saved Successfully!'); 
     cancelDpEdit(); 
-    fetchDigitalProducts();
+    fetchDigitalProducts(); 
   };
 
   const handleDeleteDp = async (id: string) => { 
@@ -327,6 +438,7 @@ export default function Home() {
     } 
   };
 
+  // Legacy Accounts & Services Admin Handlers
   const handleSelectEditProduct = (name: string) => { 
     setEditingProduct(name); 
     const dbData = dbProducts[name]; 
@@ -334,42 +446,49 @@ export default function Home() {
     setEditStatus(dbData?.status || 'Available'); 
     setEditPrices(dbData?.prices || fallback?.prices || []); 
   };
+
   const updateEditPrice = (index: number, field: 'label' | 'price', value: string) => { 
     const newPrices = [...editPrices]; 
     newPrices[index][field] = value; 
     setEditPrices(newPrices); 
   };
+
   const addPriceOption = () => setEditPrices([...editPrices, { label: 'New Option', price: '₱0' }]);
   const removePriceOption = (index: number) => setEditPrices(editPrices.filter((_, i) => i !== index));
+
   const handleSaveProduct = async () => { 
     if (!editingProduct) return; 
     const { error } = await supabase.from('ruri_products').upsert({ product_name: editingProduct, status: editStatus, prices: editPrices }); 
     if (!error) { 
       alert('✅ Product Pricing Updated!'); 
       fetchDbProducts(); 
-    } else { 
-      alert('❌ Error updating product.'); 
-    } 
+    } else alert('❌ Error updating product.'); 
   };
   
   const loadServiceToEdit = (svc: any) => { 
-    setEditingSvcId(svc.id); setSvcTitle(svc.title); setSvcContent(svc.content); setSvcNote(svc.note || ''); 
+    setEditingSvcId(svc.id); 
+    setSvcTitle(svc.title); 
+    setSvcContent(svc.content); 
+    setSvcNote(svc.note || ''); 
   };
+
   const cancelServiceEdit = () => { 
-    setEditingSvcId(null); setSvcTitle(''); setSvcContent(''); setSvcNote(''); 
+    setEditingSvcId(null); 
+    setSvcTitle(''); 
+    setSvcContent(''); 
+    setSvcNote(''); 
   };
+
   const handleSaveService = async () => { 
     if (!svcTitle || !svcContent) return alert('Title and Content are required!'); 
     const payload = { title: svcTitle, content: svcContent, note: svcNote }; 
-    if (editingSvcId) { 
-      await supabase.from('ruri_services').update(payload).eq('id', editingSvcId); 
-    } else { 
-      await supabase.from('ruri_services').insert([payload]); 
-    } 
+    if (editingSvcId) await supabase.from('ruri_services').update(payload).eq('id', editingSvcId); 
+    else await supabase.from('ruri_services').insert([payload]); 
     alert('✅ Service saved successfully!'); 
     cancelServiceEdit(); 
     fetchDbServices(); 
   };
+
   const handleDeleteService = async (id: string) => { 
     if (confirm('Delete this service permanently?')) { 
       await supabase.from('ruri_services').delete().eq('id', id); 
@@ -377,39 +496,48 @@ export default function Home() {
     } 
   };
 
+  // Nav Handlers
   const toggleCategory = (categoryName: string) => setOpenCategory(openCategory === categoryName ? null : categoryName);
   const toggleService = (serviceName: string) => setOpenService(openService === serviceName ? null : serviceName);
   const handleNav = (tab: string) => { setActiveTab(tab); setIsSidebarOpen(false); window.scrollTo(0,0); };
-  
   const handleAdminLogin = (e: React.FormEvent) => { 
     e.preventDefault(); 
     if (adminUsername === 'rurishopz' && adminPin === '192005') { 
-      setIsAdminLoggedIn(true); setLoginError(false); setAdminUsername(''); setAdminPin(''); 
-    } else { 
+      setIsAdminLoggedIn(true); 
+      setLoginError(false); 
+      setAdminUsername(''); 
+      setAdminPin(''); 
+    } else {
       setLoginError(true); 
-    } 
+    }
   };
   const handleAdminLogout = () => { setIsAdminLoggedIn(false); setActiveTab('dashboard'); };
-  const openProductDetail = (product: any) => { setActiveDigitalProduct(product); setActiveTab('product-detail'); window.scrollTo(0, 0); };
+  
+  const openProductDetail = (product: any) => { 
+    if (product.external_link && product.external_link.trim() !== '') {
+      window.open(product.external_link, '_blank');
+      return;
+    }
+    setActiveDigitalProduct(product); 
+    setActiveTab('product-detail'); 
+    window.scrollTo(0, 0); 
+  };
 
   const inputStyle = { width: '100%', padding: '12px 15px', borderRadius: '10px', border: '1px solid #E6A8D7', backgroundColor: '#FDF0F5', color: '#8A2BE2', marginBottom: '15px', fontFamily: textFont.style.fontFamily, outline: 'none', boxSizing: 'border-box' as const };
   const labelStyle = { display: 'block', color: '#8A2BE2', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.95rem' };
-
+  
   const totalTicketsCount = tickets.length;
   const pendingCount = tickets.filter(t => t.status === 'Pending').length;
   const inProgressCount = tickets.filter(t => t.status === 'In Progress').length;
   const completedCount = tickets.filter(t => t.status === 'Completed').length;
-
-  const visibleTickets = tickets.filter(ticket => {
-    const ticketDate = new Date(ticket.created_at);
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    return ticketDate >= ninetyDaysAgo;
+  
+  const visibleTickets = tickets.filter(ticket => { 
+    const ticketDate = new Date(ticket.created_at); 
+    const ninetyDaysAgo = new Date(); 
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90); 
+    return ticketDate >= ninetyDaysAgo; 
   });
-
-  const displayedPublicTickets = ticketSearch.trim() 
-    ? tickets.filter(t => t.ticket_id?.includes(ticketSearch.trim()))
-    : visibleTickets;
+  const displayedPublicTickets = ticketSearch.trim() ? tickets.filter(t => t.ticket_id?.includes(ticketSearch.trim())) : visibleTickets;
 
   const TicketStatsGrid = () => (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
@@ -443,7 +571,7 @@ export default function Home() {
         .hover-btn:active { transform: scale(0.95); }
       `}} />
 
-      {/* SIDEBAR NAVIGATION */}
+      {/* SIDEBAR NAVIGATION (NO LOGIN BUTTON) */}
       <button 
         onClick={() => setIsSidebarOpen(true)} 
         style={{ position: 'fixed', top: '15px', left: '15px', zIndex: 50, backgroundColor: '#8A2BE2', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 15px', fontSize: '1.5rem', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}
@@ -515,14 +643,21 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* REDESIGNED PREMIUM NOTICE */}
+              {/* REVISION 2 ITEM 1: SMALL LANDSCAPE BOX BEFORE IMPORTANT NOTICE */}
+              <div style={{ backgroundColor: '#FDF0F5', border: '1.5px dashed #D27DCE', borderRadius: '12px', padding: '10px 15px', marginBottom: '15px', textAlign: 'center' }}>
+                <p style={{ margin: 0, color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                  (Below is not related to Digital Products but premium account.)
+                </p>
+              </div>
+
+              {/* REVISION 2 ITEM 2: REVERTED IMPORTANT NOTICE TEXT */}
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', borderLeft: '6px solid #8A2BE2', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
                   <span style={{ fontSize: '1.5rem', marginRight: '10px' }}>⚠️</span>
                   <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', margin: 0, fontSize: '1.2rem' }}>Important Notice</h3>
                 </div>
                 <p style={{ color: '#D27DCE', margin: 0, fontWeight: 'bold', fontSize: '0.95rem', lineHeight: '1.6' }}>
-                  Please note that the premium products (Accounts/Apps) are BMed. This simply means that possible errors or problems may occur on the account.
+                  Please note that the premium accounts are BMed. This simply means that possible errors or problems may occur on the account.
                 </p>
               </div>
               
@@ -846,12 +981,12 @@ export default function Home() {
                            </select>
                          </div>
                          <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
-                           {req.user_username && <p style={{ margin: '2px 0' }}><strong>User:</strong> {req.user_username}</p>}
-                           {req.ruri_username && <p style={{ margin: '2px 0' }}><strong>Followed IG:</strong> {req.ruri_username}</p>}
+                           {req.user_username && <p style={{ margin: '2px 0' }}><strong>Username:</strong> {req.user_username}</p>}
+                           {req.ruri_username && <p style={{ margin: '2px 0' }}><strong>Account / Name:</strong> {req.ruri_username}</p>}
                            {req.referral_code && <p style={{ margin: '2px 0' }}><strong>Ref Code:</strong> {req.referral_code}</p>}
-                           {req.platform_link && <p style={{ margin: '2px 0' }}><strong>Platform Link:</strong> <a href={req.platform_link} target="_blank" rel="noreferrer">Link</a></p>}
+                           {req.platform_link && <p style={{ margin: '2px 0' }}><strong>Profile Link:</strong> <a href={req.platform_link} target="_blank" rel="noreferrer" style={{ color: '#8A2BE2' }}>{req.platform_link}</a></p>}
                            <p style={{ margin: '2px 0' }}><strong>Email:</strong> {req.email}</p>
-                           <p style={{ margin: '2px 0', color: '#D27DCE', fontWeight: 'bold' }}><strong>Screenshot Proof:</strong> {req.screenshot_url}</p>
+                           <p style={{ margin: '2px 0', color: '#D27DCE', fontWeight: 'bold' }}><strong>Verification:</strong> {req.screenshot_url}</p>
                          </div>
                       </div>
                     ))
@@ -859,7 +994,7 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ADMIN SUB-TAB 4: DIGITAL PRODUCTS MANAGER */}
+              {/* ADMIN SUB-TAB 4: DIGITAL PRODUCTS (DIRECT GALLERY UPLOADS) */}
               {adminSection === 'digital-products' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                   <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem' }}>📦 Digital Products Manager</h4>
@@ -880,7 +1015,7 @@ export default function Home() {
                   <div style={{ borderTop: '2px solid #FDF0F5', paddingTop: '20px', marginTop: '20px' }}>
                     <h5 style={{ color: '#8A2BE2', margin: '0 0 15px 0', fontSize: '1.1rem' }}>{editingDpId ? '✏️ Edit Digital Product' : '➕ Add New Digital Product'}</h5>
                     
-                    <label style={labelStyle}>Title</label>
+                    <label style={labelStyle}>Product Title</label>
                     <input type="text" name="title" value={dpForm.title} onChange={handleDpChange} placeholder="Product Title" style={inputStyle} />
                     
                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -899,17 +1034,30 @@ export default function Home() {
                       Is this a FREE product?
                     </label>
 
-                    <label style={labelStyle}>Cover Image URL (Required)</label>
-                    <input type="text" name="cover_url" value={dpForm.cover_url} onChange={handleDpChange} placeholder="https://..." style={inputStyle} />
+                    {/* DIRECT GALLERY UPLOAD FOR COVER IMAGE */}
+                    <label style={labelStyle}>Cover Image (Upload from Gallery / Files)</label>
+                    <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'cover_url')} style={inputStyle} />
+                    {uploadingCover && <p style={{ color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', margin: '-5px 0 10px 0' }}>⏳ Uploading image to storage...</p>}
+                    {dpForm.cover_url && (
+                      <div style={{ marginBottom: '15px' }}>
+                        <p style={{ margin: '0 0 5px 0', fontSize: '0.8rem', color: '#888' }}>Current Cover Preview:</p>
+                        <img src={dpForm.cover_url} alt="Cover preview" style={{ height: '90px', borderRadius: '8px', border: '2px solid #E6A8D7', objectFit: 'cover' }} />
+                      </div>
+                    )}
                     
-                    <label style={labelStyle}>Preview Image URLs (Comma Separated)</label>
-                    <textarea name="previews" value={dpForm.previews} onChange={handleDpChange} placeholder="url1, url2, url3" rows={2} style={inputStyle}></textarea>
+                    <label style={labelStyle}>Preview Image URLs (Optional comma-separated)</label>
+                    <textarea name="previews" value={dpForm.previews} onChange={handleDpChange} placeholder="url1, url2" rows={2} style={inputStyle}></textarea>
                     
-                    <label style={labelStyle}>Video URL (Optional)</label>
-                    <input type="text" name="video_url" value={dpForm.video_url} onChange={handleDpChange} placeholder="https://..." style={inputStyle} />
+                    {/* DIRECT GALLERY / FILE UPLOAD FOR VIDEO */}
+                    <label style={labelStyle}>Product Video (Upload from Files / Gallery)</label>
+                    <input type="file" accept="video/*" onChange={(e) => handleFileUpload(e, 'video_url')} style={inputStyle} />
+                    {uploadingVideo && <p style={{ color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', margin: '-5px 0 10px 0' }}>⏳ Uploading video to storage...</p>}
+                    {dpForm.video_url && (
+                      <p style={{ fontSize: '0.85rem', color: '#22C55E', fontWeight: 'bold', marginBottom: '15px' }}>✅ Video file attached!</p>
+                    )}
                     
-                    <label style={labelStyle}>External Link (Gumroad/Etsy/Stanstore/RaketPH)</label>
-                    <input type="text" name="external_link" value={dpForm.external_link} onChange={handleDpChange} placeholder="https://..." style={inputStyle} />
+                    <label style={labelStyle}>Direct Open from Gumroad/RaketPH/Etsy/Stanstore URL</label>
+                    <input type="text" name="external_link" value={dpForm.external_link} onChange={handleDpChange} placeholder="https://gumroad.com/..." style={inputStyle} />
 
                     <label style={labelStyle}>Direct File URL (If direct download)</label>
                     <input type="text" name="file_url" value={dpForm.file_url} onChange={handleDpChange} placeholder="https://..." style={inputStyle} />
@@ -926,7 +1074,7 @@ export default function Home() {
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle}>Format</label>
-                        <input type="text" name="format" value={dpForm.format} onChange={handleDpChange} placeholder="e.g. PDF" style={inputStyle} />
+                        <input type="text" name="format" value={dpForm.format} onChange={handleDpChange} placeholder="e.g. PDF, Notion" style={inputStyle} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle}>Notes</label>
@@ -1025,13 +1173,102 @@ export default function Home() {
           )}
 
           {/* ========================================================= */}
-          {/* VIEW: DIGITAL STOREFRONT (WITH BOTTOM FREE BANNER)          */}
+          {/* VIEW: DIGITAL STOREFRONT (WITH 14 RULES & FREE GUIDE)      */}
           {/* ========================================================= */}
           {activeTab === 'digital-store' && (
             <div style={{ animation: 'fadeIn 0.5s' }}>
-              <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2.2rem', textAlign: 'center', marginBottom: '1rem' }}>Digital Depot</h3>
-              <p style={{ textAlign: 'center', color: '#D27DCE', fontWeight: 'bold', marginBottom: '2rem' }}>Templates, Assets, and Creative Resources.</p>
+              <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2.2rem', textAlign: 'center', marginBottom: '0.5rem' }}>Digital Depot</h3>
+              <p style={{ textAlign: 'center', color: '#D27DCE', fontWeight: 'bold', marginBottom: '1.5rem' }}>Templates, Assets, and Creative Resources.</p>
               
+              {/* DIGITAL PRODUCTS - REVISION 2 ITEM 3: 14 RULES & REGULATIONS (FOLDABLE) */}
+              <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '25px', borderLeft: '6px solid #8A2BE2', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
+                <div onClick={() => setOpenDigitalRules(!openDigitalRules)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                  <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.2rem', margin: 0 }}>
+                    📜 Digital Products — Rules &amp; Regulations
+                  </h4>
+                  <span style={{ color: '#D27DCE', fontSize: '1.2rem', fontWeight: 'bold' }}>{openDigitalRules ? '▴' : '▾'}</span>
+                </div>
+                
+                {openDigitalRules && (
+                  <div style={{ marginTop: '15px', color: '#8A2BE2', fontSize: '0.9rem', lineHeight: '1.7', borderTop: '1px dashed #E6A8D7', paddingTop: '15px' }}>
+                    <p style={{ fontStyle: 'italic', color: '#D27DCE', marginBottom: '15px' }}>
+                      Thank you for choosing Ruri&apos;s Digital Depot! Before purchasing or downloading any digital product, please take a moment to read these rules and regulations. By purchasing or accessing our digital products, you agree to the following terms.
+                    </p>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>1. Please Review Before Purchasing</strong><br/>
+                      Please review the product description, previews, included files, features, and other available information before purchasing. Because our products are delivered digitally and may be downloaded or accessed immediately, all digital product purchases are final and non-refundable. If you are unsure whether a product is suitable for your needs, please contact us before purchasing.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>2. Lifetime Access</strong><br/>
+                      Your purchase comes with lifetime access to the digital product you purchased, subject to the continued availability of our website and digital services. Please keep your purchase information and downloaded files in a safe place for your own records.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>3. Resell &amp; Modification Rights</strong><br/>
+                      Selected products may come with resell or commercial-use rights as stated on the individual product page. You may use our templates as a starting point and redesign, edit, customize, or significantly alter them for your own business or projects. However, you may not simply download our original product and repost, re-upload, or resell it unchanged while claiming it as your own creation. If you choose to publish or distribute a product without making meaningful changes to the original design/content, proper credit to Rurika Digital Products is required. Purchasing a digital product does not transfer ownership of Rurika&apos;s original intellectual property.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>4. No Unauthorized Redistribution</strong><br/>
+                      You may not: Upload our original files to free-download websites, file-sharing platforms, or public groups; Give away the original files as freebies; Share your purchased files with people who did not purchase them; Repackage and redistribute the original product as your own; Claim the original design, content, or template as your exclusive creation; Sell or distribute an unchanged copy of our product without permission. Please respect the time, creativity, and work invested into creating each digital product.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>5. You May Customize Your Product</strong><br/>
+                      We encourage you to make the product your own. Depending on the rights included with your purchase, you may customize elements such as: Colors, Fonts, Text, Layouts, Images, Branding, Content, and other design elements. If you substantially redesign or transform the product into your own original work, you may use it according to the rights stated on the product page.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>6. Digital Products Only</strong><br/>
+                      All products available under our Digital Products section are digital products. No physical item will be shipped unless specifically stated otherwise. Please make sure your device, software, application, or platform is compatible with the product before purchasing.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>7. Download &amp; File Responsibility</strong><br/>
+                      Once your files have been successfully delivered or made available to you, please download and store a backup copy for your personal records. We recommend keeping your purchased files somewhere safe so you can access them when needed.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>8. Technical Issues</strong><br/>
+                      If you experience a broken download link, missing file, corrupted file, or another technical problem related to your purchase, please contact us at <a href="mailto:digipro.customerhelp@rurika.shop" style={{ color: '#D27DCE', fontWeight: 'bold' }}>digipro.customerhelp@rurika.shop</a>. We will do our best to investigate and provide a reasonable solution. Technical assistance does not automatically qualify a purchase for a refund.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>9. Updates &amp; Changes</strong><br/>
+                      From time to time, we may improve, update, correct, or modify our digital products. Unless specifically stated on the product page, purchasing a product does not guarantee access to every future version, redesign, or completely new edition of that product.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>10. Intellectual Property</strong><br/>
+                      All original designs, written content, graphics, branding, layouts, and other creative materials remain the intellectual property of Rurika Digital Products unless otherwise stated. Your purchase gives you the rights specifically stated for that product. It does not give you ownership of Rurika&apos;s brand, original files, or intellectual property.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>11. Feedback &amp; Customer Support</strong><br/>
+                      We genuinely want to improve the products and service we provide. If there is something you are not satisfied with, please let us know. You may leave a short feedback, complaint, suggestion, or review through our website: <a href="https://www.rurika.shop" target="_blank" rel="noreferrer" style={{ color: '#D27DCE' }}>www.rurika.shop</a> or email us at: <a href="mailto:digitaldepot@rurika.shop" style={{ color: '#D27DCE' }}>digitaldepot@rurika.shop</a>.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>12. Respectful Communication</strong><br/>
+                      We welcome honest feedback, including complaints and constructive criticism. We simply ask that communication with our team remains respectful so we can focus on solving the issue and helping you as effectively as possible.
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>13. Violation of These Rules</strong><br/>
+                      If a customer intentionally distributes, reproduces, or resells our original products in violation of these terms, we reserve the right to restrict access to our digital services, discontinue customer support, and take other appropriate action where necessary.
+                    </div>
+
+                    <div>
+                      <strong>14. Agreement</strong><br/>
+                      By purchasing, downloading, or accessing a Rurika Digital Product, you acknowledge that you have read and agreed to these Digital Product Rules &amp; Regulations. Thank you for supporting our work and respecting the creativity behind each product. We truly appreciate your support. ♡
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* DIGITAL PRODUCTS LIST (DIRECT REDIRECT TO EXTERNAL STORES) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '30px' }}>
                 {dbDigitalProducts.length > 0 ? (
                   dbDigitalProducts.map((product) => (
@@ -1044,26 +1281,29 @@ export default function Home() {
                         </div>
                         <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.4rem', margin: '0 0 10px 0' }}>{product.title}</h4>
                         <p style={{ color: '#888', fontSize: '0.95rem', margin: '0 0 20px 0', lineHeight: '1.5' }}>{product.short_desc}</p>
+                        
                         <div style={{ display: 'flex', gap: '10px' }}>
-                          <button onClick={() => openProductDetail(product)} className="hover-btn" style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>View Details</button>
+                          <button onClick={() => openProductDetail(product)} className="hover-btn" style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>
+                            {product.external_link ? 'View on Store ↗' : 'View Details'}
+                          </button>
                         </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p style={{ textAlign: 'center', color: '#8A2BE2', fontStyle: 'italic' }}>More digital products coming soon!</p>
+                  <p style={{ textAlign: 'center', color: '#8A2BE2', fontStyle: 'italic', margin: '20px 0' }}>More digital products coming soon!</p>
                 )}
               </div>
 
-              {/* FREE DIGITAL PRODUCT BANNER AT THE BOTTOM */}
+              {/* REVISION 2 ITEM 4: RENAMED FREE STARTER GUIDE BANNER AT BOTTOM */}
               <div 
-                onClick={() => setFreeModal({ open: true, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', name: '', platformLink: '', email: '' })} 
+                onClick={() => setFreeModal({ open: true, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', igName: '', email: '', screenshotSent: false })} 
                 className="hover-card" 
                 style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '25px 20px', textAlign: 'center', boxShadow: '0 4px 15px rgba(230,168,215,0.4)', border: '3px dashed #D27DCE', color: '#8A2BE2', marginTop: '40px' }}
               >
                 <span style={{ fontSize: '2.5rem', display: 'inline-block', marginRight: '10px', verticalAlign: 'middle' }}>🎁</span>
-                <h3 className={subtitleFont.className} style={{ fontSize: '1.5rem', margin: 0, display: 'inline-block', verticalAlign: 'middle' }}>Access Free Digital Product</h3>
-                <p style={{ color: '#D27DCE', fontSize: '0.95rem', margin: '8px 0 0 0', fontWeight: 'bold' }}>Click here to claim your free template &amp; resources!</p>
+                <h3 className={subtitleFont.className} style={{ fontSize: '1.4rem', margin: 0, display: 'inline-block', verticalAlign: 'middle' }}>Free Digital Creator Starter Guide</h3>
+                <p style={{ color: '#D27DCE', fontSize: '0.95rem', margin: '8px 0 0 0', fontWeight: 'bold' }}>Click here to claim your free creator starter guide!</p>
               </div>
             </div>
           )}
@@ -1085,13 +1325,19 @@ export default function Home() {
                   ) : (
                      <div style={{ height: '250px', width: '100%', backgroundImage: `url(${activeDigitalProduct.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: '#FDF0F5' }}></div>
                   )}
-                  {activeDigitalProduct.previews && activeDigitalProduct.previews.length > 0 && (
-                    <div style={{ display: 'flex', overflowX: 'auto', padding: '15px', gap: '10px', backgroundColor: '#FAFAFA' }}>
-                       {activeDigitalProduct.previews.map((img: string, i: number) => (
-                         <img key={i} src={img} alt={`Preview ${i}`} style={{ height: '80px', borderRadius: '8px', border: '1px solid #eee' }} />
-                       ))}
-                    </div>
-                  )}
+                  
+                  {/* CRASH-PROOF PREVIEW PARSER */}
+                  {(() => {
+                    const previewsList = Array.isArray(activeDigitalProduct.previews) 
+                      ? activeDigitalProduct.previews 
+                      : (typeof activeDigitalProduct.previews === 'string' && activeDigitalProduct.previews ? activeDigitalProduct.previews.split(',').map((s: string) => s.trim()) : []);
+                    return previewsList.length > 0 ? (
+                      <div style={{ display: 'flex', overflowX: 'auto', padding: '15px', gap: '10px', backgroundColor: '#FAFAFA' }}>
+                         {previewsList.map((img: string, i: number) => <img key={i} src={img} alt={`Preview ${i}`} style={{ height: '80px', borderRadius: '8px', border: '1px solid #eee' }} />)}
+                      </div>
+                    ) : null;
+                  })()}
+
                   <div style={{ padding: '25px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                       <h2 className={titleFont.className} style={{ color: '#8A2BE2', margin: 0, fontSize: '2rem' }}>{activeDigitalProduct.title}</h2>
@@ -1099,26 +1345,36 @@ export default function Home() {
                         {activeDigitalProduct.is_free ? 'FREE' : activeDigitalProduct.price}
                       </span>
                     </div>
+                    
                     <p style={{ color: '#666', lineHeight: '1.7', fontSize: '1rem', marginBottom: '25px', whiteSpace: 'pre-wrap' }}>{activeDigitalProduct.full_desc}</p>
+                    
+                    {/* CRASH-PROOF INCLUDES PARSER */}
                     <div style={{ backgroundColor: '#FDF0F5', padding: '20px', borderRadius: '15px', marginBottom: '25px', border: '1px dashed #E6A8D7' }}>
                       <h4 style={{ color: '#D27DCE', margin: '0 0 10px 0' }}>📦 What&apos;s Included:</h4>
                       <ul style={{ color: '#8A2BE2', margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
-                        {activeDigitalProduct.includes && activeDigitalProduct.includes.map((item: string, i: number) => <li key={i}>{item}</li>)}
+                        {(() => {
+                          const incList = Array.isArray(activeDigitalProduct.includes) 
+                            ? activeDigitalProduct.includes 
+                            : (typeof activeDigitalProduct.includes === 'string' && activeDigitalProduct.includes ? activeDigitalProduct.includes.split(',').map((s: string) => s.trim()) : []);
+                          return incList.length > 0 ? incList.map((item: string, i: number) => <li key={i}>{item}</li>) : <li>Standard digital access included</li>;
+                        })()}
                       </ul>
-                      <p style={{ margin: '15px 0 0 0', fontSize: '0.9rem', color: '#888' }}><strong>Format:</strong> {activeDigitalProduct.format}</p>
+                      <p style={{ margin: '15px 0 0 0', fontSize: '0.9rem', color: '#888' }}><strong>Format:</strong> {activeDigitalProduct.format || 'Digital Download'}</p>
                     </div>
+
                     {activeDigitalProduct.notes && (
                       <div style={{ backgroundColor: '#FEF2F2', padding: '15px', borderRadius: '10px', marginBottom: '25px' }}>
                         <p style={{ margin: 0, color: '#EF4444', fontSize: '0.9rem', fontWeight: 'bold' }}>⚠️ Important Note: {activeDigitalProduct.notes}</p>
                       </div>
                     )}
+
                     {activeDigitalProduct.is_free ? (
-                      <button onClick={() => setFreeModal({ open: true, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', name: '', platformLink: '', email: '' })} className="hover-btn" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#D27DCE', color: '#ffffff', fontWeight: 'bold', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(210,125,206,0.4)' }}>
-                        Access Free Product
+                      <button onClick={() => setFreeModal({ open: true, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', igName: '', email: '', screenshotSent: false })} className="hover-btn" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#D27DCE', color: '#ffffff', fontWeight: 'bold', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(210,125,206,0.4)' }}>
+                        Claim Free Guide
                       </button>
                     ) : (
                       <a href={activeDigitalProduct.external_link || activeDigitalProduct.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover-btn" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(138,43,226,0.4)', textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        Buy Now
+                        {activeDigitalProduct.external_link ? 'Buy on Store ↗' : 'Buy Now'}
                       </a>
                     )}
                   </div>
@@ -1350,70 +1606,127 @@ export default function Home() {
       </main>
 
       {/* ========================================================= */}
-      {/* GLOBAL MODALS (FREE ACCESS, SUCCESS, LEGACY POPUPS)        */}
+      {/* GLOBAL MODALS (REVISED REVISION 2 FLOW)                     */}
       {/* ========================================================= */}
       
-      {/* 1. FREE DIGITAL PRODUCT ACCESS MODAL */}
+      {/* REVISION 2 ITEM 5: FREE DIGITAL CREATOR STARTER GUIDE ACCESS MODAL */}
       {freeModal.open && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' }}>
-          <div style={{ backgroundColor: '#ffffff', padding: '30px', borderRadius: '20px', maxWidth: '400px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', position: 'relative' }}>
-            <button onClick={() => setFreeModal({open: false, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', name: '', platformLink: '', email: ''})} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', color: '#D27DCE', cursor: 'pointer' }}>×</button>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}><span style={{ fontSize: '2.5rem' }}>🎁</span><h2 className={titleFont.className} style={{ color: '#8A2BE2', margin: '5px 0 0 0', fontSize: '1.8rem' }}>Free Access</h2></div>
+          <div style={{ backgroundColor: '#ffffff', padding: '30px', borderRadius: '20px', maxWidth: '420px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', position: 'relative' }}>
+            
+            <button onClick={() => setFreeModal({ open: false, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', igName: '', email: '', screenshotSent: false })} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', color: '#D27DCE', cursor: 'pointer' }}>×</button>
+            
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <span style={{ fontSize: '2.5rem' }}>🎁</span>
+              <h2 className={titleFont.className} style={{ color: '#8A2BE2', margin: '5px 0 0 0', fontSize: '1.6rem' }}>Free Creator Starter Guide</h2>
+            </div>
+
+            {/* STEP 1: SOURCE SURVEY */}
             {freeModal.step === 1 && (
               <div style={{ animation: 'fadeIn 0.3s' }}>
-                <p style={{ color: '#D27DCE', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>How did you find Ruri&apos;s Shop?</p>
+                <p style={{ color: '#D27DCE', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>Where did you hear about the Free Guide?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                   {['Instagram', 'TikTok', 'Facebook', 'Referral', 'Other'].map(opt => (
                     <label key={opt} style={{ display: 'flex', alignItems: 'center', padding: '12px', borderRadius: '10px', border: freeModal.source === opt ? '2px solid #8A2BE2' : '1px solid #E6A8D7', backgroundColor: freeModal.source === opt ? '#F3E8FF' : '#FDF0F5', cursor: 'pointer', fontWeight: 'bold', color: '#8A2BE2' }}>
                       <input type="radio" name="source" value={opt} checked={freeModal.source === opt} onChange={(e) => setFreeModal({...freeModal, source: e.target.value})} style={{ marginRight: '10px' }} /> {opt}
                     </label>
                   ))}
-                  {freeModal.source === 'Other' && <input type="text" placeholder="Please specify..." value={freeModal.otherSource} onChange={(e) => setFreeModal({...freeModal, otherSource: e.target.value})} style={{...inputStyle, marginTop: '10px'}} autoFocus />}
+                  {freeModal.source === 'Other' && (
+                    <input type="text" placeholder="Please specify platform..." value={freeModal.otherSource} onChange={(e) => setFreeModal({...freeModal, otherSource: e.target.value})} style={{...inputStyle, marginTop: '10px'}} autoFocus />
+                  )}
                 </div>
                 <button onClick={handleNextFreeStep} className="hover-btn" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>Continue →</button>
               </div>
             )}
+
+            {/* STEP 2A: INSTAGRAM & TIKTOK FORM */}
             {freeModal.step === 2 && (freeModal.source === 'Instagram' || freeModal.source === 'TikTok') && (
               <div style={{ animation: 'fadeIn 0.3s' }}>
-                <p style={{ color: '#D27DCE', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>Verify your follow to get access!</p>
-                <div style={{ backgroundColor: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}><p style={{ margin: 0, color: '#EF4444', fontSize: '0.85rem', fontWeight: 'bold', textAlign: 'center' }}>⚠️ You must follow @ruris_digitaldepot first!</p></div>
-                <label style={labelStyle}>Your {freeModal.source} Username:</label><input type="text" placeholder="@yourusername" value={freeModal.igUsername} onChange={(e) => setFreeModal({...freeModal, igUsername: e.target.value})} style={inputStyle} />
-                <label style={labelStyle}>Ruri Shop Account You Followed:</label><input type="text" placeholder="@ruris_digitaldepot" value={freeModal.ruriUsername} onChange={(e) => setFreeModal({...freeModal, ruriUsername: e.target.value})} style={inputStyle} />
-                <label style={labelStyle}>Email to receive product:</label><input type="email" placeholder="you@example.com" value={freeModal.email} onChange={(e) => setFreeModal({...freeModal, email: e.target.value})} style={inputStyle} />
-                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}><button onClick={() => setFreeModal({...freeModal, step: 1})} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>Back</button><button onClick={handleNextFreeStep} className="hover-btn" style={{ flex: 2, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>Request Access</button></div>
+                <p style={{ color: '#D27DCE', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>Please fill out verification details:</p>
+                <div style={{ backgroundColor: '#FDF0F5', padding: '10px', borderRadius: '8px', marginBottom: '15px', border: '1px dashed #E6A8D7' }}>
+                  <p style={{ margin: 0, color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', textAlign: 'center' }}>Make sure you have followed @ruris_digitaldepot!</p>
+                </div>
+                
+                <label style={labelStyle}>Your Instagram username:</label>
+                <input type="text" placeholder="@yourusername" value={freeModal.igUsername} onChange={(e) => setFreeModal({...freeModal, igUsername: e.target.value})} style={inputStyle} />
+                
+                <label style={labelStyle}>Our Instagram account username that you followed:</label>
+                <input type="text" placeholder="@ruris_digitaldepot" value={freeModal.ruriUsername} onChange={(e) => setFreeModal({...freeModal, ruriUsername: e.target.value})} style={inputStyle} />
+                
+                <label style={labelStyle}>Email to receive the product:</label>
+                <input type="email" placeholder="you@example.com" value={freeModal.email} onChange={(e) => setFreeModal({...freeModal, email: e.target.value})} style={inputStyle} />
+                
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <button onClick={() => setFreeModal({...freeModal, step: 1})} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>Back</button>
+                  <button onClick={handleNextFreeStep} className="hover-btn" style={{ flex: 2, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>Request Access</button>
+                </div>
               </div>
             )}
+
+            {/* STEP 2B: FACEBOOK, REFERRAL, OTHER FORM */}
             {freeModal.step === 2 && (freeModal.source === 'Facebook' || freeModal.source === 'Referral' || freeModal.source === 'Other') && (
               <div style={{ animation: 'fadeIn 0.3s' }}>
-                <p style={{ color: '#D27DCE', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>Submit Request for Access</p>
-                <div style={{ backgroundColor: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}><p style={{ margin: 0, color: '#EF4444', fontSize: '0.85rem', fontWeight: 'bold', textAlign: 'center' }}>⚠️ Step 1: Follow @ruris_digitaldepot on Instagram first!</p></div>
-                {freeModal.source === 'Referral' && <><label style={labelStyle}>Valid Referral Code:</label><input type="text" placeholder="e.g. RURI12345" value={freeModal.referralCode} onChange={(e) => setFreeModal({...freeModal, referralCode: e.target.value})} style={{...inputStyle, border: '2px solid #8A2BE2'}} /></>}
-                <label style={labelStyle}>Your Name:</label><input type="text" placeholder="John Doe" value={freeModal.name} onChange={(e) => setFreeModal({...freeModal, name: e.target.value})} style={inputStyle} />
-                <label style={labelStyle}>Platform Link (Your Profile):</label><input type="text" placeholder="https://facebook.com/..." value={freeModal.platformLink} onChange={(e) => setFreeModal({...freeModal, platformLink: e.target.value})} style={inputStyle} />
-                <label style={labelStyle}>Email to receive product:</label><input type="email" placeholder="you@example.com" value={freeModal.email} onChange={(e) => setFreeModal({...freeModal, email: e.target.value})} style={inputStyle} />
-                <p style={{ fontSize: '0.85rem', color: '#888', textAlign: 'center', margin: '15px 0' }}>Please message me on Telegram with your screenshot proof of follow to speed up approval!</p>
-                <div style={{ display: 'flex', gap: '10px' }}><button onClick={() => setFreeModal({...freeModal, step: 1})} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>Back</button><button onClick={handleNextFreeStep} className="hover-btn" style={{ flex: 2, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>Submit Request</button></div>
+                <p style={{ color: '#D27DCE', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>Please fill out verification details:</p>
+                
+                <label style={labelStyle}>Valid Referral Code (Required for Referral):</label>
+                <input type="text" placeholder="e.g. RURI12345" value={freeModal.referralCode} onChange={(e) => setFreeModal({...freeModal, referralCode: e.target.value})} style={{...inputStyle, border: freeModal.source === 'Referral' ? '2px solid #8A2BE2' : '1px solid #E6A8D7'}} />
+                
+                <label style={labelStyle}>Instagram Name:</label>
+                <input type="text" placeholder="Your Display Name" value={freeModal.igName} onChange={(e) => setFreeModal({...freeModal, igName: e.target.value})} style={inputStyle} />
+
+                <label style={labelStyle}>Instagram Username:</label>
+                <input type="text" placeholder="@yourusername" value={freeModal.igUsername} onChange={(e) => setFreeModal({...freeModal, igUsername: e.target.value})} style={inputStyle} />
+                
+                <label style={labelStyle}>Email to receive the product:</label>
+                <input type="email" placeholder="you@example.com" value={freeModal.email} onChange={(e) => setFreeModal({...freeModal, email: e.target.value})} style={inputStyle} />
+                
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <button onClick={() => setFreeModal({...freeModal, step: 1})} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>Back</button>
+                  <button onClick={handleNextFreeStep} className="hover-btn" style={{ flex: 2, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>Request Access</button>
+                </div>
               </div>
             )}
+
+            {/* STEP 3: CONFIRMATION SCREEN WITH CLICKABLE CONTACT BUTTONS */}
             {freeModal.step === 3 && (
               <div style={{ animation: 'fadeIn 0.3s', textAlign: 'center' }}>
-                <div style={{ backgroundColor: '#FEF3C7', color: '#92400E', padding: '20px', borderRadius: '15px', marginBottom: '20px', fontWeight: 'bold' }}>⏳ Request Submitted!</div>
-                <p style={{ color: '#8A2BE2', fontSize: '1rem', lineHeight: '1.5', marginBottom: '20px' }}>Your request has been sent to the Admin for approval. Please wait while we verify your details.<br/><br/>Make sure to send your screenshot proof on Telegram!</p>
-                <a href="https://t.me/strobariii" target="_blank" rel="noopener noreferrer" className="hover-btn" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', display: 'block', textDecoration: 'none', marginBottom: '10px' }}>Message on Telegram</a>
-                <button onClick={() => setFreeModal({open: false, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', name: '', platformLink: '', email: ''})} style={{ background: 'none', border: 'none', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>Close</button>
+                <div style={{ backgroundColor: '#FEF3C7', color: '#92400E', padding: '18px', borderRadius: '15px', marginBottom: '15px', fontWeight: 'bold' }}>
+                  ⏳ Request Submitted!
+                </div>
+                
+                <p style={{ color: '#8A2BE2', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '15px' }}>
+                  To speed up your approval, you may send a screenshot proof of follow via email, instagram, telegram alongside your preferred email address to receive the product:
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                  <a href="mailto:digitaldepot@rurika.shop?subject=Proof%20of%20Follow%20-%20Free%20Guide" target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '12px', backgroundColor: '#EA4335', color: '#ffffff', borderRadius: '10px', fontWeight: 'bold', textDecoration: 'none' }}>
+                    ✉️ Send via Gmail (digitaldepot@rurika.shop)
+                  </a>
+                  <a href="https://t.me/strobariii" target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '12px', backgroundColor: '#229ED9', color: '#ffffff', borderRadius: '10px', fontWeight: 'bold', textDecoration: 'none' }}>
+                    ✈️ Send via Telegram (@strobariii)
+                  </a>
+                  <a href="https://www.instagram.com/ruris_digitaldepot?stkn=cDd2MHMwdzVzbHF6" target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '12px', backgroundColor: '#E1306C', color: '#ffffff', borderRadius: '10px', fontWeight: 'bold', textDecoration: 'none' }}>
+                    📸 Send via Instagram (@ruris_digitaldepot)
+                  </a>
+                </div>
+
+                <button onClick={() => setFreeModal({ open: false, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', igName: '', email: '', screenshotSent: false })} style={{ background: 'none', border: 'none', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>Close</button>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* 2. SUCCESS POPUP MODAL */}
+      {/* 2. SUCCESS POPUP MODAL (TICKET SUBMIT) */}
       {showSuccessModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '30px', borderRadius: '20px', textAlign: 'center', maxWidth: '400px', width: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '3px solid #8A2BE2' }}>
             <h2 style={{ color: '#22C55E', margin: '0 0 15px 0', fontSize: '2rem' }}>✅ Success!</h2>
             <p style={{ color: '#8A2BE2', fontSize: '1.1rem', marginBottom: '15px', fontWeight: 'bold' }}>Your ticket has been submitted successfully.</p>
-            <div style={{ backgroundColor: '#FDF0F5', padding: '20px', borderRadius: '10px', marginBottom: '20px', border: '2px dashed #E6A8D7' }}><p style={{ margin: 0, color: '#D27DCE', fontWeight: 'bold' }}>Your Ticket ID:</p><h3 style={{ margin: '5px 0 0 0', color: '#8A2BE2', fontSize: '2.5rem', letterSpacing: '3px' }}>#{successTicketId}</h3></div>
+            <div style={{ backgroundColor: '#FDF0F5', padding: '20px', borderRadius: '10px', marginBottom: '20px', border: '2px dashed #E6A8D7' }}>
+              <p style={{ margin: 0, color: '#D27DCE', fontWeight: 'bold' }}>Your Ticket ID:</p>
+              <h3 style={{ margin: '5px 0 0 0', color: '#8A2BE2', fontSize: '2.5rem', letterSpacing: '3px' }}>#{successTicketId}</h3>
+            </div>
             <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px' }}>Please save this ID. You can track your live ticket status in the <strong>&quot;Submitted Tickets&quot;</strong> tab using this number.</p>
             <button onClick={() => setShowSuccessModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '10px', backgroundColor: '#8A2BE2', color: 'white', fontWeight: 'bold', fontSize: '1.1rem', border: 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(138,43,226,0.3)' }}>Close</button>
           </div>
@@ -1440,7 +1753,7 @@ export default function Home() {
                 </div>
               ) : <p style={{ color: '#D27DCE', margin: '15px 0', fontSize: '1.1rem', fontWeight: 'bold', textAlign: 'center' }}>Direct Message Owner for the price.</p>}
               {fallback && fallback.rules && fallback.rules.length > 0 && (
-                <div style={{ backgroundColor: '#FDF0F5', padding: '15px', borderRadius: '10px', marginBottom: '15px' }}><p style={{ margin: '0 0 5px 0', color: '#8A2BE2', fontWeight: 'bold', fontSize: '0.9rem' }}>Rules & Details:</p><ul style={{ margin: 0, paddingLeft: '20px', color: '#D27DCE', fontSize: '0.85rem', lineHeight: '1.5' }}>{fallback.rules.map((rule, i) => <li key={i}>{rule}</li>)}</ul></div>
+                <div style={{ backgroundColor: '#FDF0F5', padding: '15px', borderRadius: '10px', marginBottom: '15px' }}><p style={{ margin: '0 0 5px 0', color: '#8A2BE2', fontWeight: 'bold', fontSize: '0.9rem' }}>Rules &amp; Details:</p><ul style={{ margin: 0, paddingLeft: '20px', color: '#D27DCE', fontSize: '0.85rem', lineHeight: '1.5' }}>{fallback.rules.map((rule, i) => <li key={i}>{rule}</li>)}</ul></div>
               )}
               <p style={{ color: '#EF4444', fontSize: '0.85rem', fontWeight: 'bold', textAlign: 'center', margin: '10px 0', backgroundColor: '#FEF2F2', padding: '10px', borderRadius: '8px' }}>⚠️ Ask first before sending payment to check stock&apos;s availability.{fallback && fallback.note && <><br/><br/>📌 Note: {fallback.note}</>}</p>
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '20px' }}>
