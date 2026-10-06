@@ -83,13 +83,14 @@ export default function Home() {
   const [selectedBoosting, setSelectedBoosting] = useState<string | null>(null);
   const [openService, setOpenService] = useState<string | null>(null);
 
-  // Digital Products & Rules Toggle
+  // Digital Products & 14 Rules Accordion Toggle
   const [dbDigitalProducts, setDbDigitalProducts] = useState<any[]>([]);
   const [activeDigitalProduct, setActiveDigitalProduct] = useState<any>(null);
   const [openDigitalRules, setOpenDigitalRules] = useState(false);
 
-  // Media Upload States (Supabase Storage)
+  // Direct Gallery Upload States (Supabase Storage)
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingPreviews, setUploadingPreviews] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
 
   // Database Synced Records
@@ -224,7 +225,17 @@ export default function Home() {
     if (data) setDbFreeRequests(data);
   };
 
-  // Media Upload Handler (Images & Videos directly to Supabase Storage)
+  // Helper to ensure links (like Gumroad, Etsy, Stanstore) never trigger a 404
+  const formatUrl = (url: string) => {
+    if (!url || !url.trim()) return '';
+    const trimmed = url.trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return `https://${trimmed}`;
+    }
+    return trimmed;
+  };
+
+  // Direct Gallery Upload Handler for Cover Image and Videos
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'cover_url' | 'video_url') => {
     try {
       const file = e.target.files?.[0];
@@ -245,12 +256,49 @@ export default function Home() {
 
       const { data } = supabase.storage.from('product-media').getPublicUrl(filePath);
       setDpForm(prev => ({ ...prev, [field]: data.publicUrl }));
-      alert(`✅ ${field === 'cover_url' ? 'Image' : 'Video'} uploaded successfully from gallery/files!`);
+      alert(`✅ ${field === 'cover_url' ? 'Cover image' : 'Video'} uploaded successfully from gallery!`);
     } catch (err: any) {
-      alert('Upload error: ' + (err.message || 'Make sure you have created the public "product-media" storage bucket in Supabase.'));
+      alert('Upload error: ' + (err.message || 'Make sure you created the public "product-media" storage bucket in Supabase.'));
     } finally {
       if (field === 'cover_url') setUploadingCover(false);
       if (field === 'video_url') setUploadingVideo(false);
+    }
+  };
+
+  // Direct Gallery Upload Handler for Multiple Preview Images
+  const handlePreviewUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      setUploadingPreviews(true);
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `previews/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('product-media')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from('product-media').getPublicUrl(filePath);
+        uploadedUrls.push(data.publicUrl);
+      }
+
+      setDpForm(prev => {
+        const currentPreviews = prev.previews ? prev.previews.split(',').map(s => s.trim()).filter(Boolean) : [];
+        const combined = [...currentPreviews, ...uploadedUrls].join(', ');
+        return { ...prev, previews: combined };
+      });
+      alert('✅ Preview images uploaded from gallery successfully!');
+    } catch (err: any) {
+      alert('Upload error: ' + (err.message || 'Failed to upload preview images.'));
+    } finally {
+      setUploadingPreviews(false);
     }
   };
 
@@ -305,9 +353,9 @@ export default function Home() {
         
         await supabase.from('ruri_free_requests').insert([{
           platform: freeModal.source,
-          user_username: freeModal.igUsername,
-          ruri_username: freeModal.ruriUsername,
-          email: freeModal.email,
+          user_username: freeModal.igUsername.trim(),
+          ruri_username: freeModal.ruriUsername.trim(),
+          email: freeModal.email.trim(),
           screenshot_url: 'Optional Proof Via Channels',
           status: 'Pending'
         }]);
@@ -334,11 +382,11 @@ export default function Home() {
         }
 
         await supabase.from('ruri_free_requests').insert([{
-          platform: freeModal.source === 'Other' ? freeModal.otherSource : freeModal.source,
-          referral_code: freeModal.referralCode,
-          user_username: freeModal.igUsername, // Instagram Username
-          ruri_username: freeModal.igName,     // Instagram Name
-          email: freeModal.email,
+          platform: freeModal.source === 'Other' ? freeModal.otherSource.trim() : freeModal.source,
+          referral_code: freeModal.referralCode.trim(),
+          user_username: freeModal.igUsername.trim(),
+          ruri_username: freeModal.igName.trim(),
+          email: freeModal.email.trim(),
           screenshot_url: 'Optional Proof Via Channels',
           status: 'Pending'
         }]);
@@ -398,10 +446,10 @@ export default function Home() {
   const handleSaveDp = async () => { 
     if (!dpForm.title) return alert("Product title is required."); 
     const previewArray = typeof dpForm.previews === 'string' 
-      ? dpForm.previews.split(',').map(s => s.trim()).filter(s => s) 
+      ? dpForm.previews.split(',').map(s => s.trim()).filter(Boolean) 
       : [];
     const includesArray = typeof dpForm.includes === 'string' 
-      ? dpForm.includes.split(',').map(s => s.trim()).filter(s => s) 
+      ? dpForm.includes.split(',').map(s => s.trim()).filter(Boolean) 
       : [];
       
     const payload = { 
@@ -412,7 +460,7 @@ export default function Home() {
       previews: previewArray, 
       video_url: dpForm.video_url, 
       file_url: dpForm.file_url, 
-      external_link: dpForm.external_link, 
+      external_link: formatUrl(dpForm.external_link), 
       short_desc: dpForm.short_desc, 
       full_desc: dpForm.full_desc, 
       includes: includesArray, 
@@ -500,6 +548,7 @@ export default function Home() {
   const toggleCategory = (categoryName: string) => setOpenCategory(openCategory === categoryName ? null : categoryName);
   const toggleService = (serviceName: string) => setOpenService(openService === serviceName ? null : serviceName);
   const handleNav = (tab: string) => { setActiveTab(tab); setIsSidebarOpen(false); window.scrollTo(0,0); };
+  
   const handleAdminLogin = (e: React.FormEvent) => { 
     e.preventDefault(); 
     if (adminUsername === 'rurishopz' && adminPin === '192005') { 
@@ -515,7 +564,7 @@ export default function Home() {
   
   const openProductDetail = (product: any) => { 
     if (product.external_link && product.external_link.trim() !== '') {
-      window.open(product.external_link, '_blank');
+      window.open(formatUrl(product.external_link), '_blank');
       return;
     }
     setActiveDigitalProduct(product); 
@@ -862,10 +911,7 @@ export default function Home() {
                   <button 
                     key={tab.id} 
                     onClick={() => setAdminSection(tab.id as any)} 
-                    style={{ flex: 1, minWidth: '90px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === tab.id ? '#8A2BE2' : '#ffffff', color: adminSection === tab.id ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}
-                  >
-                    {tab.label}
-                  </button>
+                    style={{ flex: 1, minWidth: '90px', padding: '10px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: adminSection === tab.id ? '#8A2BE2' : '#ffffff', color: adminSection === tab.id ? 'white' : '#8A2BE2', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>{tab.label}</button>
                 ))}
               </div>
 
@@ -885,8 +931,7 @@ export default function Home() {
                           <select 
                             value={ticket.status} 
                             onChange={(e) => updateTicketStatus(ticket.id, e.target.value)} 
-                            style={{ padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', border: 'none', outline: 'none', backgroundColor: ticket.status === 'Completed' ? '#4ADE80' : ticket.status === 'In Progress' ? '#FBBF24' : '#FCA5A5', color: 'white' }}
-                          >
+                            style={{ padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', border: 'none', outline: 'none', backgroundColor: ticket.status === 'Completed' ? '#4ADE80' : ticket.status === 'In Progress' ? '#FBBF24' : '#FCA5A5', color: 'white' }}>
                             <option value="Pending">Pending</option>
                             <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
@@ -898,8 +943,7 @@ export default function Home() {
                         
                         <button 
                           onClick={() => setExpandedTicketId(expandedTicketId === ticket.id ? null : ticket.id)} 
-                          style={{ background: 'none', border: 'none', color: '#8A2BE2', fontWeight: 'bold', cursor: 'pointer', padding: 0, marginTop: '10px' }}
-                        >
+                          style={{ background: 'none', border: 'none', color: '#8A2BE2', fontWeight: 'bold', cursor: 'pointer', padding: 0, marginTop: '10px' }}>
                           {expandedTicketId === ticket.id ? 'Hide Details ▲' : 'View Full Details ▼'}
                         </button>
 
@@ -973,8 +1017,7 @@ export default function Home() {
                            <select 
                              value={req.status} 
                              onChange={(e) => updateFreeRequestStatus(req.id, e.target.value)} 
-                             style={{ padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', border: 'none', outline: 'none', backgroundColor: req.status === 'Approved' ? '#4ADE80' : req.status === 'Pending' ? '#FBBF24' : '#FCA5A5', color: 'white' }}
-                           >
+                             style={{ padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', border: 'none', outline: 'none', backgroundColor: req.status === 'Approved' ? '#4ADE80' : req.status === 'Pending' ? '#FBBF24' : '#FCA5A5', color: 'white' }}>
                               <option value="Pending">Pending</option>
                               <option value="Approved">Approved</option>
                               <option value="Rejected">Rejected</option>
@@ -994,7 +1037,7 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ADMIN SUB-TAB 4: DIGITAL PRODUCTS (DIRECT GALLERY UPLOADS) */}
+              {/* ADMIN SUB-TAB 4: DIGITAL PRODUCTS (DIRECT GALLERY UPLOADS FOR COVER, PREVIEWS, VIDEO) */}
               {adminSection === 'digital-products' && (
                 <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                   <h4 style={{ color: '#D27DCE', margin: '0 0 15px 0', fontSize: '1.4rem' }}>📦 Digital Products Manager</h4>
@@ -1021,7 +1064,7 @@ export default function Home() {
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle}>Price</label>
-                        <input type="text" name="price" value={dpForm.price} onChange={handleDpChange} placeholder="e.g. ₱250" style={inputStyle} />
+                        <input type="text" name="price" value={dpForm.price} onChange={handleDpChange} placeholder="e.g. ₱250 or $5.99" style={inputStyle} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle}>Category</label>
@@ -1037,29 +1080,41 @@ export default function Home() {
                     {/* DIRECT GALLERY UPLOAD FOR COVER IMAGE */}
                     <label style={labelStyle}>Cover Image (Upload from Gallery / Files)</label>
                     <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'cover_url')} style={inputStyle} />
-                    {uploadingCover && <p style={{ color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', margin: '-5px 0 10px 0' }}>⏳ Uploading image to storage...</p>}
+                    {uploadingCover && <p style={{ color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', margin: '-5px 0 10px 0' }}>⏳ Uploading cover image...</p>}
                     {dpForm.cover_url && (
                       <div style={{ marginBottom: '15px' }}>
-                        <p style={{ margin: '0 0 5px 0', fontSize: '0.8rem', color: '#888' }}>Current Cover Preview:</p>
+                        <p style={{ margin: '0 0 5px 0', fontSize: '0.8rem', color: '#888' }}>Cover Image Preview:</p>
                         <img src={dpForm.cover_url} alt="Cover preview" style={{ height: '90px', borderRadius: '8px', border: '2px solid #E6A8D7', objectFit: 'cover' }} />
                       </div>
                     )}
                     
-                    <label style={labelStyle}>Preview Image URLs (Optional comma-separated)</label>
-                    <textarea name="previews" value={dpForm.previews} onChange={handleDpChange} placeholder="url1, url2" rows={2} style={inputStyle}></textarea>
+                    {/* DIRECT GALLERY UPLOAD FOR PREVIEW IMAGES */}
+                    <label style={labelStyle}>Preview Images (Upload from Gallery / Files)</label>
+                    <input type="file" accept="image/*" multiple onChange={handlePreviewUpload} style={inputStyle} />
+                    {uploadingPreviews && <p style={{ color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', margin: '-5px 0 10px 0' }}>⏳ Uploading preview images...</p>}
+                    {dpForm.previews && (
+                      <div style={{ marginBottom: '15px' }}>
+                        <p style={{ margin: '0 0 5px 0', fontSize: '0.8rem', color: '#888' }}>Attached Preview Images:</p>
+                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
+                          {dpForm.previews.split(',').map((url, idx) => (
+                            <img key={idx} src={url.trim()} alt={`Preview ${idx}`} style={{ height: '60px', borderRadius: '6px', border: '1px solid #E6A8D7', objectFit: 'cover' }} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     
                     {/* DIRECT GALLERY / FILE UPLOAD FOR VIDEO */}
                     <label style={labelStyle}>Product Video (Upload from Files / Gallery)</label>
                     <input type="file" accept="video/*" onChange={(e) => handleFileUpload(e, 'video_url')} style={inputStyle} />
-                    {uploadingVideo && <p style={{ color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', margin: '-5px 0 10px 0' }}>⏳ Uploading video to storage...</p>}
+                    {uploadingVideo && <p style={{ color: '#8A2BE2', fontSize: '0.85rem', fontWeight: 'bold', margin: '-5px 0 10px 0' }}>⏳ Uploading video...</p>}
                     {dpForm.video_url && (
-                      <p style={{ fontSize: '0.85rem', color: '#22C55E', fontWeight: 'bold', marginBottom: '15px' }}>✅ Video file attached!</p>
+                      <p style={{ fontSize: '0.85rem', color: '#22C55E', fontWeight: 'bold', marginBottom: '15px' }}>✅ Video attached successfully!</p>
                     )}
                     
                     <label style={labelStyle}>Direct Open from Gumroad/RaketPH/Etsy/Stanstore URL</label>
-                    <input type="text" name="external_link" value={dpForm.external_link} onChange={handleDpChange} placeholder="https://gumroad.com/..." style={inputStyle} />
+                    <input type="text" name="external_link" value={dpForm.external_link} onChange={handleDpChange} placeholder="gumroad.com/l/..." style={inputStyle} />
 
-                    <label style={labelStyle}>Direct File URL (If direct download)</label>
+                    <label style={labelStyle}>Direct File URL (If direct download link)</label>
                     <input type="text" name="file_url" value={dpForm.file_url} onChange={handleDpChange} placeholder="https://..." style={inputStyle} />
 
                     <label style={labelStyle}>Short Description</label>
@@ -1180,7 +1235,7 @@ export default function Home() {
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2.2rem', textAlign: 'center', marginBottom: '0.5rem' }}>Digital Depot</h3>
               <p style={{ textAlign: 'center', color: '#D27DCE', fontWeight: 'bold', marginBottom: '1.5rem' }}>Templates, Assets, and Creative Resources.</p>
               
-              {/* DIGITAL PRODUCTS - REVISION 2 ITEM 3: 14 RULES & REGULATIONS (FOLDABLE) */}
+              {/* DIGITAL PRODUCTS - 14 RULES & REGULATIONS (FOLDABLE) */}
               <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '25px', borderLeft: '6px solid #8A2BE2', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                 <div onClick={() => setOpenDigitalRules(!openDigitalRules)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
                   <h4 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '1.2rem', margin: 0 }}>
@@ -1268,7 +1323,7 @@ export default function Home() {
                 )}
               </div>
 
-              {/* DIGITAL PRODUCTS LIST (DIRECT REDIRECT TO EXTERNAL STORES) */}
+              {/* DIGITAL PRODUCTS LIST */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '30px' }}>
                 {dbDigitalProducts.length > 0 ? (
                   dbDigitalProducts.map((product) => (
@@ -1283,9 +1338,25 @@ export default function Home() {
                         <p style={{ color: '#888', fontSize: '0.95rem', margin: '0 0 20px 0', lineHeight: '1.5' }}>{product.short_desc}</p>
                         
                         <div style={{ display: 'flex', gap: '10px' }}>
-                          <button onClick={() => openProductDetail(product)} className="hover-btn" style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}>
-                            {product.external_link ? 'View on Store ↗' : 'View Details'}
-                          </button>
+                          {product.external_link && product.external_link.trim() !== '' ? (
+                            <a 
+                              href={formatUrl(product.external_link)} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="hover-btn" 
+                              style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', textDecoration: 'none', display: 'block' }}
+                            >
+                              View on Store ↗
+                            </a>
+                          ) : (
+                            <button 
+                              onClick={() => openProductDetail(product)} 
+                              className="hover-btn" 
+                              style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '2px solid #E6A8D7', backgroundColor: 'transparent', color: '#D27DCE', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                              View Details
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1295,7 +1366,7 @@ export default function Home() {
                 )}
               </div>
 
-              {/* REVISION 2 ITEM 4: RENAMED FREE STARTER GUIDE BANNER AT BOTTOM */}
+              {/* FREE DIGITAL CREATOR STARTER GUIDE BANNER AT BOTTOM */}
               <div 
                 onClick={() => setFreeModal({ open: true, step: 1, source: '', otherSource: '', referralCode: '', igUsername: '', ruriUsername: '', igName: '', email: '', screenshotSent: false })} 
                 className="hover-card" 
@@ -1309,7 +1380,7 @@ export default function Home() {
           )}
 
           {/* ========================================================= */}
-          {/* VIEW: PRODUCT DETAIL (DIGITAL STORE)                       */}
+          {/* VIEW: PRODUCT DETAIL                                        */}
           {/* ========================================================= */}
           {activeTab === 'product-detail' && activeDigitalProduct && (
              <div style={{ animation: 'fadeIn 0.5s' }}>
@@ -1330,7 +1401,7 @@ export default function Home() {
                   {(() => {
                     const previewsList = Array.isArray(activeDigitalProduct.previews) 
                       ? activeDigitalProduct.previews 
-                      : (typeof activeDigitalProduct.previews === 'string' && activeDigitalProduct.previews ? activeDigitalProduct.previews.split(',').map((s: string) => s.trim()) : []);
+                      : (typeof activeDigitalProduct.previews === 'string' && activeDigitalProduct.previews ? activeDigitalProduct.previews.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                     return previewsList.length > 0 ? (
                       <div style={{ display: 'flex', overflowX: 'auto', padding: '15px', gap: '10px', backgroundColor: '#FAFAFA' }}>
                          {previewsList.map((img: string, i: number) => <img key={i} src={img} alt={`Preview ${i}`} style={{ height: '80px', borderRadius: '8px', border: '1px solid #eee' }} />)}
@@ -1355,7 +1426,7 @@ export default function Home() {
                         {(() => {
                           const incList = Array.isArray(activeDigitalProduct.includes) 
                             ? activeDigitalProduct.includes 
-                            : (typeof activeDigitalProduct.includes === 'string' && activeDigitalProduct.includes ? activeDigitalProduct.includes.split(',').map((s: string) => s.trim()) : []);
+                            : (typeof activeDigitalProduct.includes === 'string' && activeDigitalProduct.includes ? activeDigitalProduct.includes.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                           return incList.length > 0 ? incList.map((item: string, i: number) => <li key={i}>{item}</li>) : <li>Standard digital access included</li>;
                         })()}
                       </ul>
@@ -1373,7 +1444,7 @@ export default function Home() {
                         Claim Free Guide
                       </button>
                     ) : (
-                      <a href={activeDigitalProduct.external_link || activeDigitalProduct.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover-btn" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(138,43,226,0.4)', textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <a href={formatUrl(activeDigitalProduct.external_link) || formatUrl(activeDigitalProduct.file_url) || '#'} target="_blank" rel="noopener noreferrer" className="hover-btn" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#8A2BE2', color: '#ffffff', fontWeight: 'bold', fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 4px 15px rgba(138,43,226,0.4)', textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                         {activeDigitalProduct.external_link ? 'Buy on Store ↗' : 'Buy Now'}
                       </a>
                     )}
@@ -1413,7 +1484,7 @@ export default function Home() {
             <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Services Offered</h3>
               
-              {/* Dynamic Services from Admin (Shown Above) */}
+              {/* Dynamic Services from Admin */}
               {dbServices.length > 0 && dbServices.map(svc => (
                   <div key={svc.id} style={{ backgroundColor: '#ffffff', borderRadius: '15px', padding: '20px', marginBottom: '15px', boxShadow: '0 4px 15px rgba(230, 168, 215, 0.3)' }}>
                     <div onClick={() => toggleService(svc.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
@@ -1502,7 +1573,6 @@ export default function Home() {
 
           {/* ========================================================= */}
           {/* VIEW: REPORTS & TICKETS                                    */}
-          {/* ========================================================= */}
           {activeTab === 'reports' && (
              <div style={{ animation: 'fadeIn 0.5s' }}>
               <h3 className={subtitleFont.className} style={{ color: '#8A2BE2', fontSize: '2rem', textAlign: 'center', marginBottom: '2rem', borderBottom: '3px solid #E6A8D7', paddingBottom: '10px' }}>Report Forms</h3>
@@ -1609,7 +1679,7 @@ export default function Home() {
       {/* GLOBAL MODALS (REVISED REVISION 2 FLOW)                     */}
       {/* ========================================================= */}
       
-      {/* REVISION 2 ITEM 5: FREE DIGITAL CREATOR STARTER GUIDE ACCESS MODAL */}
+      {/* 1. FREE CREATOR STARTER GUIDE MODAL */}
       {freeModal.open && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '30px', borderRadius: '20px', maxWidth: '420px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', position: 'relative' }}>
@@ -1668,7 +1738,7 @@ export default function Home() {
               <div style={{ animation: 'fadeIn 0.3s' }}>
                 <p style={{ color: '#D27DCE', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>Please fill out verification details:</p>
                 
-                <label style={labelStyle}>Valid Referral Code (Required for Referral):</label>
+                <label style={labelStyle}>Valid Referral Code (Required if referred):</label>
                 <input type="text" placeholder="e.g. RURI12345" value={freeModal.referralCode} onChange={(e) => setFreeModal({...freeModal, referralCode: e.target.value})} style={{...inputStyle, border: freeModal.source === 'Referral' ? '2px solid #8A2BE2' : '1px solid #E6A8D7'}} />
                 
                 <label style={labelStyle}>Instagram Name:</label>
